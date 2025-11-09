@@ -10,6 +10,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@ant-design/icons": "^6.1.0",
     "@tanstack/react-router": "^1.134.15",
     "@tanstack/react-router-devtools": "^1.134.15",
     "@tauri-apps/api": "^2",
