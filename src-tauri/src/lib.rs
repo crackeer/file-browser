@@ -1,10 +1,9 @@
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-use tauri_plugin_sql::{Migration, MigrationKind};
+#[macro_use]
+extern crate lazy_static;
 
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
+mod command;
+use command::ssh::{remote_exec_command, ssh_connect_by_password, upload_remote_file, remote_list_files};
+use tauri_plugin_sql::{Migration, MigrationKind};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -15,11 +14,15 @@ pub fn run() {
                 .add_migrations("sqlite:storage.db", sqlite_migration())
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![greet])
+        .invoke_handler(tauri::generate_handler![
+            ssh_connect_by_password,
+            remote_exec_command,
+            upload_remote_file,
+            remote_list_files
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
-
 
 fn sqlite_migration() -> Vec<Migration> {
     vec![

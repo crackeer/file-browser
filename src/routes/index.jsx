@@ -1,30 +1,40 @@
-import React, {useEffect} from 'react';
+import React, { useEffect, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router'
 import { Button, Divider, Select, Row } from 'antd';
-import {getStorageList} from "../service/database";
+import { getStorageList } from "../service/database";
 export const Route = createFileRoute('/')({
-  component: Index,
+    component: Index,
 })
 
 function Index() {
-  useEffect(() => {
-    getStorageList('ssh').then(res => {
-      console.log('storage list', res)
-    })
-  }, [])
-  return <>
-     <div style={{ padding: 20}}>
-      选择数据源：
-      <Select
-        style={{ width: 250, display: 'inline-block', marginRight: 10 }}
-        options={[
-          { label: 'Option 1', value: '1' },
-          { label: 'Option 2', value: '2' },
-        ]}
-        placeholder="Select an option"
+    const [list, setList] = useState([]);
+    const [serverID, setServerID] = useState(0);
+    useEffect(() => {
+        getStorageList('ssh').then(res => {
+            setList(res)
+            if (res.length > 0) {
+                setServerID(res[0].id)
+            }
+        })
+    }, [])
 
-      />
-      <Button type="primary">新增</Button>
-    </div>
-  </>
+    var connectSSH = () => {
+        console.log(serverID)
+    }
+    return <>
+        <div style={{ padding: 20 }}>
+            选择数据源：
+            <Select
+                style={{ width: 300, display: 'inline-block', marginRight: 10 }} value={serverID} onChange={(val) => {
+                    setServerID(val)
+                }}>
+                {
+                    list.map(item => {
+                        return <Select.Option value={item.id}>{item.name}</Select.Option>
+                    })
+                }
+                </Select>
+            <Button type="primary" onClick={connectSSH}>连接</Button>
+        </div>
+    </>
 }

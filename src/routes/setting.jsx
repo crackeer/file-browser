@@ -40,14 +40,18 @@ function Setting() {
             dataIndex: ['config', 'username'],
             key: 'username',
         },
-
+        {
+            title: '根目录',
+            dataIndex: ['config', 'directory'],
+            key: 'directory',
+        },
         {
             title: '操作',
             fixed: 'right',
             key: 'action',
             render: (text, record) => {
                 return <Space>
-                    <Button type="link" size='small'>复制</Button>
+                    <Button type="link" size='small' onClick={() => toCopy(record)}>复制</Button>
                     <Button type="link" size='small' onClick={() => toDelete(record)}>删除</Button>
                 </Space>
             }
@@ -69,14 +73,23 @@ function Setting() {
         form.validateFields().then(async (value) => {
             console.log('Success:', value);
             setOpen(false);
-            let res = await createStorage(value.name, activeKey, {
-                address: value.address,
-                port: value.port,
-                username: value.username,
-                password: value.password,
-            });
-            let newList = await getStorageList(activeKey);
-            setList(newList);
+            try {
+                let res = await createStorage(value.name, activeKey, {
+                    address: value.address,
+                    port: value.port,
+                    username: value.username,
+                    password: value.password,
+                    directory: value.directory
+                });
+                let newList = await getStorageList(activeKey);
+                setList(newList);
+            } catch (error) {
+                console.log('error', error);
+                modal.error({
+                    content: '创建失败:' + error.message,
+                })
+            }
+
         }).catch(info => {
             console.log('Validate Failed:', info);
         });
@@ -93,6 +106,18 @@ function Setting() {
                 setList(newList);
             },
         });
+    }
+
+    var toCopy = (record) => {
+        form.setFieldsValue({
+            name: record.name + '_copy',
+            address: record.config.address,
+            port: record.config.port,
+            username: record.config.username,
+            password: record.config.password,
+            directory: record.config.directory
+        })
+        setOpen(true)
     }
 
     return <>
@@ -120,7 +145,7 @@ function Setting() {
             }}
         >
             <Form form={form} layout="horizontal" labelCol={{ span: 5 }} wrapperCol={{ span: 17 }} initialValues={{
-                port: '22', username: 'root'
+                port: '22', username: 'root', directory: '/tmp/'
             }}>
                 <Form.Item label="名称" name="name" rules={[{ required: true, message: '请输入名称' }]}>
                     <Input />
@@ -136,6 +161,9 @@ function Setting() {
                 </Form.Item>
                 <Form.Item label="密码" name="password" rules={[{ required: true, message: '请输入密码' }]}>
                     <Input type="password" />
+                </Form.Item>
+                <Form.Item label="根目录" name="directory" rules={[{ required: true, message: '请输入根目录' }]}>
+                    <Input />
                 </Form.Item>
             </Form>
         </Modal>

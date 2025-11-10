@@ -5,28 +5,25 @@ import { CloudServerOutlined, MailOutlined, SettingOutlined } from '@ant-design/
 const { Header, Footer, Content } = Layout;
 
 const headerStyle = {
-  textAlign: 'center',
-  height: 40,
-  lineHeight: '40px',
-  padding: 0,
+    textAlign: 'center',
+    height: 40,
+    lineHeight: '40px',
+    padding: 0,
 };
 export const Route = createRootRoute({
-  component: () => (
-    <>
-    <Layout>
-      <Header style={headerStyle}>
-        <Menu  mode="horizontal" items={[
-          { key: 'mail', icon: <CloudServerOutlined />, label: <Link to="/">SSH</Link> },
-          { key: 'app', icon: <SettingOutlined />, label: <Link to="/setting">配置</Link> },
-        ]} />;
-      </Header>
-      <Content>
-         <Outlet />
-         <TanStackRouterDevtools />
-      </Content>
-    </Layout>
-     
-      
-    </>
-  ),
+    component: () => (
+        <>
+            <Layout>
+                <Header style={headerStyle}>
+                    <Menu mode="horizontal" items={[
+                        { key: 'mail', icon: <CloudServerOutlined />, label: <Link to="/">SSH</Link> },
+                        { key: 'setting', label: <Link to="/setting">配置</Link> },
+                    ]} />;
+                </Header>
+                <Content>
+                    <Outlet />
+                </Content>
+            </Layout>
+        </>
+    ),
 })
