@@ -1,40 +1,174 @@
 import React, { useEffect, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router'
-import { Button, Divider, Select, Row } from 'antd';
+import { Button, Space, Select, Modal, Table, Typography, Divider } from 'antd';
 import { getStorageList } from "../service/database";
+import { sshConnectByPassword, sshListFiles } from "../service/invoke"
+const { Link } = Typography;
 export const Route = createFileRoute('/')({
     component: Index,
 })
 
+async function generateQuickDirs(directory) {
+    let sep = '/';
+    let parts = directory.split(sep)
+    let list = []
+    for (var i = 0; i < parts.length; i++) {
+        if (parts[i].length > 0) {
+            list.push({
+                path: parts.slice(0, i + 1).join(sep),
+                name: parts[i]
+            })
+        }
+    }
+    return list
+}
+
 function Index() {
     const [list, setList] = useState([]);
     const [serverID, setServerID] = useState(0);
+    const [server, setServer] = useState(null);
+    const [connectKey, setConnectKey] = useState('');
+    const [modal, contextHolder] = Modal.useModal();
+    const [loading, setLoading] = useState(false);
+    const [currentDir, setCurrentDir] = useState('');
+    const [files, setFiles] = useState([])
+    const [quickDirs, setQuickDirs] = useState([])
+     const columns = [
+        {
+            'title': '名字',
+            'dataIndex': 'name',
+            'key': 'name',
+            'width': '30%',
+            'render': (col, record, index) => (
+                record.is_dir ? <a href="javascript:;" onClick={changeDir.bind(this, record.name)} style={{ textDecoration: 'none' }}>{record.name}</a> : <span>{record.name}</span>
+            )
+        },
+        {
+            'title': '权限',
+            'dataIndex': 'access',
+            'key': 'access',
+        },
+        {
+            'title': '时间',
+            'dataIndex': 'time',
+            'key': 'month',
+            'render': (col, record, index) => (
+                <>
+                    {record.month} {record.day} {record.time}
+                </>
+            )
+
+        },
+        {
+            'title': '大小',
+            'dataIndex': 'size_text',
+            'key': 'size_text',
+        },
+        {
+            'title': '用户',
+            'dataIndex': 'user',
+            'key': 'user',
+        },
+        {
+            'title': '操作',
+            'key': 'opt',
+            'align': 'center',
+            'render': (col, record, index) => {
+                return <Space>
+                    <Button onClick={toDeleteFile.bind(this, record)} size="mini" type='text' status="danger">删除</Button>
+                </Space>
+            }
+        }
+    ]
     useEffect(() => {
         getStorageList('ssh').then(res => {
             setList(res)
             if (res.length > 0) {
                 setServerID(res[0].id)
+                setServer(res[0])
             }
         })
     }, [])
-
-    var connectSSH = () => {
-        console.log(serverID)
+    const gotoDir = async (item) => {
+        setCurrentDir(item.path)
+        listFiles(connectKey, item.path)
     }
-    return <>
-        <div style={{ padding: 20 }}>
+
+    var onChangeServer = (val) => {
+        setServerID(val)
+        for (var i = 0; i < list.length; i++) {
+            if (list[i].id == val) {
+                setServer(list[i])
+            }
+        }
+    }
+    const changeDir = async (name) => {
+        setCurrentDir(currentDir + '/' + name)
+        listFiles(connectKey, currentDir + '/' + name)
+    }
+
+
+    const toDeleteFile = (file) => {
+        console.log(file)
+    }
+
+    var connectSSH = async () => {
+        let connectKey = await sshConnectByPassword("ssh-" + server.id, server.config.address, server.config.port, server.config.username, server.config.password)
+        if (connectKey == undefined) {
+            modal.error({
+                content: '连接失败',
+            })
+            return
+        }
+        setConnectKey(connectKey)
+        setCurrentDir(server.config.directory)
+        listFiles(connectKey, server.config.directory)
+    }
+
+    const listFiles = async (key, remoteDir) => {
+        if (key.length < 1) {
+            return
+        }
+        let quickDirs = await generateQuickDirs(remoteDir)
+        setQuickDirs(quickDirs)
+        setLoading(true)
+        let files = await sshListFiles(key, remoteDir)
+        setLoading(false)
+        console.log('files', files)
+        setFiles(files)
+
+    }
+
+    return <div style={{ padding: 20 }}>
+        <div>
             选择数据源：
-            <Select
-                style={{ width: 300, display: 'inline-block', marginRight: 10 }} value={serverID} onChange={(val) => {
-                    setServerID(val)
-                }}>
+            <Select style={{ width: '50%', display: 'inline-block', marginRight: 10 }} value={serverID} onChange={onChangeServer} disabled={connectKey.length > 0}>
                 {
                     list.map(item => {
-                        return <Select.Option value={item.id}>{item.name}</Select.Option>
+                        return <Select.Option value={item.id}>{item.name} - {item.config.address} - {item.config.directory}</Select.Option>
                     })
                 }
-                </Select>
-            <Button type="primary" onClick={connectSSH}>连接</Button>
+            </Select>
+            {
+                serverID > 0 && connectKey.length < 1 ? <Button type="primary" onClick={connectSSH}>连接</Button> : null
+            }
+            {
+                connectKey.length > 0 && <Button type="primary">断开</Button>
+            }
+            {contextHolder}
         </div>
-    </>
+        <Divider />
+        <Space split={"/"} align={'center'} style={{ marginRight: '0', marginBottom: '10px' }}>
+            <Link onClick={gotoDir.bind(this, { path: '/' })} key={'/'}>根目录</Link>
+            {
+                quickDirs.map(item => {
+                    return <Link onClick={gotoDir.bind(this, item)} key={item.path}>{item.name}</Link>
+                })
+            }
+        </Space>
+        <Table dataSource={files} 
+        columns={columns} 
+        size="small"
+        pagination={false} rowKey={'name'} scroll={{ y: 1000 }} footer={null} loading={loading} />
+    </div>
 }

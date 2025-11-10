@@ -2,7 +2,7 @@
 extern crate lazy_static;
 
 mod command;
-use command::ssh::{remote_exec_command, ssh_connect_by_password, upload_remote_file, remote_list_files};
+use command::ssh::{remote_exec_command, ssh_connect_by_password, upload_remote_file, remote_list_files, exist_ssh_session};
 use tauri_plugin_sql::{Migration, MigrationKind};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -17,6 +17,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             ssh_connect_by_password,
             remote_exec_command,
+            exist_ssh_session,
             upload_remote_file,
             remote_list_files
         ])
