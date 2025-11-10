@@ -1,14 +1,14 @@
 import { createRootRoute, Link, Outlet } from '@tanstack/react-router'
 import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
 import { Layout, Menu } from "antd";
-import { AppstoreOutlined, MailOutlined, SettingOutlined } from '@ant-design/icons';
+import { CloudServerOutlined, MailOutlined, SettingOutlined } from '@ant-design/icons';
 const { Header, Footer, Content } = Layout;
 
 const headerStyle = {
   textAlign: 'center',
   height: 40,
   lineHeight: '40px',
-  backgroundColor: 'transparent',
+  padding: 0,
 };
 export const Route = createRootRoute({
   component: () => (
@@ -16,8 +16,8 @@ export const Route = createRootRoute({
     <Layout>
       <Header style={headerStyle}>
         <Menu  mode="horizontal" items={[
-          { key: 'mail', icon: <MailOutlined />, label: <Link to="/">Home</Link> },
-          { key: 'app', icon: <AppstoreOutlined />, label: <Link to="/about">About</Link> },
+          { key: 'mail', icon: <CloudServerOutlined />, label: <Link to="/">SSH</Link> },
+          { key: 'app', icon: <SettingOutlined />, label: <Link to="/setting">配置</Link> },
         ]} />;
       </Header>
       <Content>
