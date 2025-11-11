@@ -2,13 +2,17 @@ import React, { useEffect, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router'
 import { Button, Space, Select, Modal, Table, Typography, Divider } from 'antd';
 import { getStorageList } from "../service/database";
-import { sshConnectByPassword, sshListFiles } from "../service/invoke"
+import { sshConnectByPassword, sshListFiles, sshDisconnect } from "../service/invoke"
+import lodash from 'lodash'
 const { Link } = Typography;
 export const Route = createFileRoute('/')({
     component: Index,
 })
 
 async function generateQuickDirs(directory) {
+    if (directory.length < 1) {
+        return []
+    }
     let sep = '/';
     let parts = directory.split(sep)
     let list = []
@@ -30,10 +34,10 @@ function Index() {
     const [connectKey, setConnectKey] = useState('');
     const [modal, contextHolder] = Modal.useModal();
     const [loading, setLoading] = useState(false);
-    const [currentDir, setCurrentDir] = useState('');
+    const [currentPath, setCurrentPath] = useState('');
     const [files, setFiles] = useState([])
     const [quickDirs, setQuickDirs] = useState([])
-     const columns = [
+    const columns = [
         {
             'title': '名字',
             'dataIndex': 'name',
@@ -90,8 +94,8 @@ function Index() {
         })
     }, [])
     const gotoDir = async (item) => {
-        setCurrentDir(item.path)
-        listFiles(connectKey, item.path)
+        setCurrentPath(item.path)
+        listFiles(connectKey, server.config.directory, item.path)
     }
 
     var onChangeServer = (val) => {
@@ -103,13 +107,22 @@ function Index() {
         }
     }
     const changeDir = async (name) => {
-        setCurrentDir(currentDir + '/' + name)
-        listFiles(connectKey, currentDir + '/' + name)
+        setCurrentPath(currentPath + '/' + name)
+        listFiles(connectKey, server.config.directory, currentPath + '/' + name)
     }
 
 
     const toDeleteFile = (file) => {
         console.log(file)
+    }
+
+    const disconnectSSH = async () => {
+        console.log('disconnectSSH')
+        await sshDisconnect(connectKey)
+        setConnectKey('')
+        setCurrentPath('')
+        setFiles([])
+        setQuickDirs([])
     }
 
     var connectSSH = async () => {
@@ -121,22 +134,22 @@ function Index() {
             return
         }
         setConnectKey(connectKey)
-        setCurrentDir(server.config.directory)
-        listFiles(connectKey, server.config.directory)
+        setCurrentPath('')
+        listFiles(connectKey, server.config.directory, '')
     }
 
-    const listFiles = async (key, remoteDir) => {
+    const listFiles = async (key, basePath, relativePath) => {
         if (key.length < 1) {
             return
         }
-        let quickDirs = await generateQuickDirs(remoteDir)
+        let quickDirs = await generateQuickDirs(relativePath)
+        let remoteDir = lodash.trimEnd(basePath, '/') + '/' + lodash.trimStart(relativePath, '/')
         setQuickDirs(quickDirs)
         setLoading(true)
         let files = await sshListFiles(key, remoteDir)
         setLoading(false)
         console.log('files', files)
         setFiles(files)
-
     }
 
     return <div style={{ padding: 20 }}>
@@ -153,22 +166,28 @@ function Index() {
                 serverID > 0 && connectKey.length < 1 ? <Button type="primary" onClick={connectSSH}>连接</Button> : null
             }
             {
-                connectKey.length > 0 && <Button type="primary">断开</Button>
+                connectKey.length > 0 && <Button type="primary" onClick={disconnectSSH}>断开</Button>
             }
             {contextHolder}
         </div>
         <Divider />
-        <Space split={"/"} align={'center'} style={{ marginRight: '0', marginBottom: '10px' }}>
-            <Link onClick={gotoDir.bind(this, { path: '/' })} key={'/'}>根目录</Link>
-            {
-                quickDirs.map(item => {
-                    return <Link onClick={gotoDir.bind(this, item)} key={item.path}>{item.name}</Link>
-                })
-            }
-        </Space>
-        <Table dataSource={files} 
-        columns={columns} 
-        size="small"
-        pagination={false} rowKey={'name'} scroll={{ y: 1000 }} footer={null} loading={loading} />
+        {
+            connectKey.length > 0 ? <div style={{ marginBottom: 10 }}>
+                <Space split={"/"} align={'center'} style={{ marginRight: '0', marginBottom: '10px' }}>
+                    <Link onClick={gotoDir.bind(this, { path: '' })} key={'/'}>{server != null ? server.config.directory : '/'}</Link>
+                    {
+                        quickDirs.map(item => {
+                            return <Link onClick={gotoDir.bind(this, item)} key={item.path}>{item.name}</Link>
+                        })
+                    }
+                </Space>
+
+            </div> : null
+        }
+        <Table dataSource={files}
+            columns={columns}
+            size="small"
+            pagination={false} rowKey={'name'} scroll={{ y: 1000 }} footer={null} loading={loading} />
+
     </div>
 }

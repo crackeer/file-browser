@@ -10,8 +10,6 @@ const invoke = async (...args) => {
     }
 }
 
-
-
 export const setWindowTitle = async (title) => {
     let result = await invoke("set_window_title", {
         title,
@@ -54,6 +52,13 @@ export const sshConnectByPassword = async (key, host, port, username, password) 
         key,
     });
 };
+
+export const sshDisconnect = async (key) => {
+    let result = await invoke("disconnect_server", {
+        sessionKey: key
+    });
+    return result;
+}
 
 export const uploadRemoteFile = async (sessionKey, localFile, remoteFile) => {
     let result = await invoke("upload_remote_file", {

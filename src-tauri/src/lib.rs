@@ -3,6 +3,7 @@ extern crate lazy_static;
 
 mod command;
 use command::ssh::{remote_exec_command, ssh_connect_by_password, upload_remote_file, remote_list_files, exist_ssh_session};
+use command::ftp::{ftp_download_file, ftp_delete_dir, ftp_create_dir, ftp_list_dir, ftp_upload_file, ftp_delete_file};
 use tauri_plugin_sql::{Migration, MigrationKind};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -19,7 +20,13 @@ pub fn run() {
             remote_exec_command,
             exist_ssh_session,
             upload_remote_file,
-            remote_list_files
+            remote_list_files,
+            ftp_download_file,
+            ftp_delete_dir,
+            ftp_create_dir,
+            ftp_list_dir,
+            ftp_upload_file,
+            ftp_delete_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
