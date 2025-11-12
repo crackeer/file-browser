@@ -4,6 +4,7 @@ import { Button, Space, Select, Modal, Table, Typography, Divider } from 'antd';
 import { getStorageList } from "../service/database";
 import { sshConnectByPassword, sshListFiles, sshDisconnect } from "../service/invoke"
 import lodash from 'lodash'
+import { useSSHStore } from '../store/ssh';
 const { Link } = Typography;
 export const Route = createFileRoute('/')({
     component: Index,
@@ -85,6 +86,7 @@ function Index() {
         }
     ]
     useEffect(() => {
+        
         getStorageList('ssh').then(res => {
             setList(res)
             if (res.length > 0) {
