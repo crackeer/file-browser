@@ -2,13 +2,20 @@
 extern crate lazy_static;
 
 mod command;
-use command::ssh::{remote_exec_command, ssh_connect_by_password, upload_remote_file, remote_list_files, exist_ssh_session};
-use command::ftp::{ftp_download_file, ftp_delete_dir, ftp_create_dir, ftp_list_dir, ftp_upload_file, ftp_delete_file};
+use command::ftp::{
+    ftp_create_dir, ftp_delete_dir, ftp_delete_file, ftp_download_file, ftp_list_dir,
+    ftp_upload_file,
+};
+use command::ssh::{
+    exist_ssh_session, remote_exec_command, remote_list_files, ssh_connect_by_password,
+    upload_remote_file, get_transfer_remote_progress, send_cancel_signal, upload_remote_file_sync,
+};
 use tauri_plugin_sql::{Migration, MigrationKind};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(
             tauri_plugin_sql::Builder::default()
@@ -27,6 +34,9 @@ pub fn run() {
             ftp_list_dir,
             ftp_upload_file,
             ftp_delete_file,
+            get_transfer_remote_progress,
+            upload_remote_file_sync,
+            send_cancel_signal,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

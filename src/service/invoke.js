@@ -6,7 +6,7 @@ const invoke = async (...args) => {
         return await tauriInvoke(...args)
     } catch (e) {
         console.log('invoke exception', e)
-        return null
+        return {error: e.toString()}
     }
 }
 
@@ -39,8 +39,8 @@ export const sshConnectByPassword = async (key, host, port, username, password) 
     let result = await invoke("exist_ssh_session", {
         sessionKey: key
     })
-    console.log('result', result)
-    if (result) {
+    console.log('exist_ssh_session', result)
+    if (result.error == undefined) {
         return key
     }
 
@@ -82,6 +82,11 @@ export const getTransferProgress = async () => {
     let result = await invoke("get_transfer_remote_progress");
     return result;
 };
+
+export const cancelFileTransfer = async () => {
+    let result = await invoke("send_cancel_signal");
+    return result;
+}
 
 
 export const sshExecuteCmd = async (sessionKey, command) => {

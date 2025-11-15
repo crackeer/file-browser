@@ -39,7 +39,7 @@ pub async fn connect_ftp(
 #[tauri::command]
 pub async fn disconnect_ftp(key: &str) -> Result<(), String> {
     let mut client = FTP_CLIENTS.lock().map_err(|_| "锁获取失败".to_string())?;
-       let ftp = client
+    let ftp = client
         .get_mut(key)
         .ok_or_else(|| "指定的FTP连接不存在".to_string())?;
     ftp.quit().map_err(|e| format!("断开连接失败: {}", e))?;
@@ -60,7 +60,6 @@ pub async fn ftp_list_dir(key: &str, path: &str) -> Result<Vec<String>, String> 
     Ok(files)
 }
 
-
 #[tauri::command]
 pub async fn ftp_upload_file(key: &str, path: &str, local_file: &str) -> Result<(), String> {
     let mut client = FTP_CLIENTS.lock().map_err(|_| "锁获取失败".to_string())?;
@@ -79,8 +78,9 @@ pub async fn ftp_download_file(key: &str, path: &str, local_file: &str) -> Resul
     let ftp = client
         .get_mut(key)
         .ok_or_else(|| "指定的FTP连接不存在".to_string())?;
-     let mut buf = ftp
-        .retr_as_buffer(&path).map_err(|e| format!("下载文件失败: {}", e))?;
+    let mut buf = ftp
+        .retr_as_buffer(&path)
+        .map_err(|e| format!("下载文件失败: {}", e))?;
     let mut data_buf = Vec::new();
     let _ = buf.read_to_end(&mut data_buf);
 

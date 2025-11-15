@@ -63,6 +63,7 @@ fn mark_transfer_failure(message: String) {
 fn mark_transfer_success() {
     let mut transfer_info = TRANSFER_INFO.lock().unwrap();
     let transfer_info = transfer_info.borrow_mut();
+    transfer_info.current = transfer_info.total;
     transfer_info.status = String::from("success");
     transfer_info.current = transfer_info.total;
     transfer_info.message = String::from("");
@@ -224,7 +225,6 @@ pub async fn upload_remote_file(
         )
         .map_err(|e| e.to_string())?;
     let tmp_file = fs::File::open(Path::new(&local_file.as_str())).map_err(|e| e.to_string())?;
-    //unsafe { CANCEL_SIGNAL = 0 }
     tokio::spawn(async move {
         let mut reader = BufReader::new(tmp_file); // 创建 BufReader
         init_transfer_info(
@@ -279,7 +279,6 @@ pub async fn upload_remote_file_sync(
         mark_transfer_failure(String::from("file empty"));
         return Err(String::from("file empty"));
     }
-
     let mut remote_channel = session
         .scp_send(
             Path::new(&remote_file.as_str()),
@@ -295,21 +294,39 @@ pub async fn upload_remote_file_sync(
         remote_file.to_string(),
         metadata.len(),
     );
+    let mut user_cancelled = false;
+    unsafe {
+        CANCEL_SIGNAL = 0;
+    }
     loop {
         let result = reader.fill_buf().map_err(|e| e.to_string())?;
+         unsafe {
+            if CANCEL_SIGNAL > 0 {
+                user_cancelled = true;
+                break;
+            }
+        }
         if result.len() < 1 {
             break;
         }
         let size = result.len();
-        remote_channel.write(reader.buffer()).map_err(|e| e.to_string())?;
+        remote_channel
+            .write(reader.buffer())
+            .map_err(|e| e.to_string())?;
+        print!("upload size: {}", size);
         reader.consume(size);
+        incr_transfer_size(size as u64);
     }
-
+    mark_transfer_success();
     remote_channel.send_eof().unwrap();
     remote_channel.wait_eof().unwrap();
     remote_channel.close().unwrap();
     remote_channel.wait_close().unwrap();
-
+    if user_cancelled {
+        mark_transfer_failure(String::from("user cancelled"));
+        return Err(String::from("user cancelled"));
+    }
+    
     Ok(String::from("success"))
 }
 
@@ -355,7 +372,6 @@ fn connect_ssh_session(
     Ok(session)
 }
 
-
 #[tauri::command]
 pub async fn ssh_connect_by_password(
     user: String,
@@ -388,6 +404,11 @@ pub async fn remote_exec_command(
     channel.exec(&cmd_string).map_err(|e| e.to_string())?;
     let mut result = String::new();
     _ = channel.read_to_string(&mut result);
+    let mut err = String::new();
+    channel.stderr().read_to_string(&mut err).ok();
+    if err.len() > 0 {
+        return Err(err);
+    }
     Ok(result)
 }
 
