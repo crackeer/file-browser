@@ -317,7 +317,7 @@ pub async fn upload_remote_file_sync(
         reader.consume(size);
         incr_transfer_size(size as u64);
     }
-    mark_transfer_success();
+    mark_transfer_failure(String::from("user cancelled"));
     remote_channel.send_eof().unwrap();
     remote_channel.wait_eof().unwrap();
     remote_channel.close().unwrap();

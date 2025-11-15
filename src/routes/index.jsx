@@ -4,7 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { Button, Space, Select, Modal, Table, Typography, Card, message, Progress, Statistic, Col, Row, Spin, Alert } from 'antd';
 import { SyncOutlined, UploadOutlined } from '@ant-design/icons';
 import { sshConnectByPassword, sshListFiles, sshDisconnect, deleteRemoteFile, uploadRemoteFileSync, getTransferProgress, cancelFileTransfer } from "../service/invoke"
-import lodash, { set } from 'lodash'
+import lodash from 'lodash'
 import { basename } from '@tauri-apps/api/path'
 import { useSSHStore } from '../store/ssh';
 const { Link } = Typography;
@@ -38,7 +38,8 @@ function Index() {
     const [loading, setLoading] = useState(false);
 
     const [showModal, setShowModal] = useState(false);
-    const [uploading, setUploading] = useState(false);
+    const [uploadStatus, setUploadStatus] = useState('');
+    const [handleMessage, setHandleMessage] = useState('');
     const [uploadConfig, setUploadConfig] = useState(null);
     const [count, setCount] = useState(0)
     const [total, setTotal] = useState(0)
@@ -179,7 +180,7 @@ function Index() {
         setFiles(files)
     }
 
-    const toUploadFile = async () => {
+    var toUploadFile = async () => {
         let selectFiles = await open({
             multipart: true,
             filters: [
@@ -205,22 +206,31 @@ function Index() {
             let fileName = await basename(selectFiles[i])
             let remoteFile = [lodash.trimEnd(server.config.directory, '/'), lodash.trimStart(currentPath, '/'), fileName].filter(part => part.length > 0).join('/')
             console.log('remoteFile', remoteFile)
-            setUploading(true)
+            setUploadStatus('uploading')
+            setUploadConfig({
+                local_file: selectFiles[i],
+                remote_file: remoteFile,
+                current: 0,
+                total: 0,   
+            })
             let result = await uploadRemoteFileSync(connectKey, selectFiles[i], remoteFile)
             if (result.error != undefined && result.error.length > 0) {
                 messageApi.open({
                     type: 'error',
                     content: '上传文件`' + selectFiles[i] + '`失败：' + result.error,
                 });
+                clearInterval(interval)
+                return
             }
+            refreshFiles()
         }
         await updateUploadProgress()
-        setUploading(false)
         clearInterval(interval)
+        setUploadStatus('success')
     }
 
     const toCancelUpload = () => {
-        if (!uploading) {
+        if (uploadStatus != 'uploading') {
             setShowModal(false)
             return
         }
@@ -231,9 +241,8 @@ function Index() {
                 console.log('cancel upload')
                 // cancel the upload
                 await cancelFileTransfer()
-                // set uploading to false
-                cancelFileTransfer()
-                setUploading(false)
+                setUploadStatus('failure')
+                setHandleMessage('上传已取消')
             }
         })
     }
@@ -247,7 +256,6 @@ function Index() {
         }
         setUploadConfig(result)
     }
-
 
     return <div style={{ padding: 20 }}>
         {messageCtxHandler}
@@ -269,24 +277,25 @@ function Index() {
             }
         </div>
         {
-            connectKey.length > 0 ? <div style={{ marginBottom: 10, marginTop: 10 }}>
-                目录：
-                <Space split={"/"} align={'center'} style={{ marginRight: '0', marginBottom: '10px' }}>
-                    <Link onClick={gotoDir.bind(this, { path: '' })} key={'/'}>{server != null ? server.config.directory : '/'}</Link>
-                    {
-                        quickDirs.map(item => {
-                            return <Link onClick={gotoDir.bind(this, item)} key={item.path}>{item.name}</Link>
-                        })
-                    }
+             connectKey.length > 0 ?  <Card size='small' type="inner">
+                <Space style={{marginBottom:'10px'}}>
+                    <Button onClick={refreshFiles} size="small" icon={<SyncOutlined />}>刷新</Button>
+                    <Button size="small" icon={<UploadOutlined />} onClick={toUploadFile}>上传</Button>
                 </Space>
-            </div> : null
+                 <div>
+                    目录：
+                    <Space split={"/"} align={'center'}>
+                        <Link onClick={gotoDir.bind(this, { path: '' })} key={'/'}>{server != null ? server.config.directory : '/'}</Link>
+                        {
+                            quickDirs.map(item => {
+                                return <Link onClick={gotoDir.bind(this, item)} key={item.path}>{item.name}</Link>
+                            })
+                        }
+                    </Space>
+                </div>
+            </Card> : null
         }
-        <div style={{ float: 'right', paddingRight: 10, paddingBottom: 10 }}>
-            <Space>
-                <Button onClick={refreshFiles} size="small" icon={<SyncOutlined />}>刷新</Button>
-                <Button size="small" icon={<UploadOutlined />} onClick={toUploadFile}>上传</Button>
-            </Space>
-        </div>
+
         <Table dataSource={files}
             columns={columns}
             size="small"
@@ -299,14 +308,12 @@ function Index() {
             onCancel={toCancelUpload}
         >
             <p>
-                {
-                    uploading ? <Spin /> : <Alert message="上传完成" type="success" />
-                }
+                <UploadMessage status={uploadStatus} message={handleMessage} />
             </p>
 
             <Row gutter={10}>
                 <Col span={5}>
-                    <Card style={{textAlign:'center'}}>
+                    <Card style={{ textAlign: 'center' }}>
                         <Statistic value={count} suffix={'/' + total} title="文件数量" />
                     </Card>
                 </Col>
@@ -316,8 +323,18 @@ function Index() {
                     <p><Progress percent={(uploadConfig?.current / uploadConfig?.total * 100).toFixed(2)} status="active" showInfo={true} /></p>
                 </Col>
             </Row>
-
         </Modal>
-
     </div>
+}
+
+function UploadMessage(props) {
+    const {status, message} = props
+    if (status == 'success') {
+        return <Alert message="上传完成" type="success" />
+    }
+    if (status == 'uploading') {
+        return <Spin />
+    }
+
+    return <Alert message={message} type="error" />
 }
