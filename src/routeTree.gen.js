@@ -9,22 +9,22 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SshRouteImport } from './routes/ssh'
 import { Route as SettingRouteImport } from './routes/setting'
-import { Route as IndexRouteImport } from './routes/index'
 
+const SshRoute = SshRouteImport.update({
+  id: '/ssh',
+  path: '/ssh',
+  getParentRoute: () => rootRouteImport,
+})
 const SettingRoute = SettingRouteImport.update({
   id: '/setting',
   path: '/setting',
   getParentRoute: () => rootRouteImport,
 })
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => rootRouteImport,
-})
 
 const rootRouteChildren = {
-  IndexRoute: IndexRoute,
   SettingRoute: SettingRoute,
+  SshRoute: SshRoute,
 }
 export const routeTree = rootRouteImport._addFileChildren(rootRouteChildren)

@@ -1,14 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router'
 import { open } from "@tauri-apps/plugin-dialog";
-import { Button, Space, Select, Modal, Table, Typography, Card, message, Progress, Statistic, Col, Row, Spin, Alert } from 'antd';
-import { SyncOutlined, UploadOutlined } from '@ant-design/icons';
-import { sshConnectByPassword, sshListFiles, sshDisconnect, deleteRemoteFile, uploadRemoteFileSync, getTransferProgress, cancelFileTransfer } from "../service/invoke"
+import { Button, Space, Select, Modal, Table, Typography, Card, message, Progress, Statistic, Col, Row, Spin, Alert, Popconfirm, Input, Empty } from 'antd';
+import { SyncOutlined, UploadOutlined, FolderAddOutlined } from '@ant-design/icons';
+import { sshConnectByPassword, sshListFiles, sshDisconnect, deleteRemoteFile, uploadRemoteFileSync, getTransferProgress, cancelFileTransfer, createRemoteDir } from "../service/invoke"
 import lodash from 'lodash'
 import { basename } from '@tauri-apps/api/path'
 import { useSSHStore } from '../store/ssh';
+import { partial } from "filesize";
 const { Link } = Typography;
-export const Route = createFileRoute('/')({
+
+const fileSize = partial({ base: 2, standard: "jedec" });
+
+export const Route = createFileRoute('/ssh')({
     component: Index,
 })
 
@@ -38,11 +42,13 @@ function Index() {
     const [loading, setLoading] = useState(false);
 
     const [showModal, setShowModal] = useState(false);
-    const [uploadStatus, setUploadStatus] = useState('');
+    const [handleStatus, setHandleStatus] = useState('');
     const [handleMessage, setHandleMessage] = useState('');
     const [uploadConfig, setUploadConfig] = useState(null);
     const [count, setCount] = useState(0)
     const [total, setTotal] = useState(0)
+
+    const  [directoryName, setDirectoryName] = useState('')
     const columns = [
         {
             'title': '名字',
@@ -67,7 +73,6 @@ function Index() {
                     {record.month} {record.day} {record.time}
                 </>
             )
-
         },
         {
             'title': '大小',
@@ -82,10 +87,10 @@ function Index() {
         {
             'title': '操作',
             'key': 'opt',
-            'align': 'center',
             'render': (col, record, index) => {
                 return <Space>
                     <Button onClick={toDeleteFile.bind(this, record)} size="small" color='danger' variant="outlined">删除</Button>
+                    {!record.is_dir && <Button onClick={downloadFile.bind(this, record)} size="small" color='primary' variant="outlined">下载</Button>}
                 </Space>
             }
         }
@@ -176,6 +181,18 @@ function Index() {
             setLoading(false)
             return
         }
+        files.sort((a, b) => {
+            if (a.is_dir && !b.is_dir) {
+                return -1
+            }
+            if (!a.is_dir && b.is_dir) {
+                return 1
+            }
+            return 0
+        })
+        for (var i in files) {
+            files[i]['size_text'] = fileSize(files[i]['size'])
+        }
         setLoading(false)
         setFiles(files)
     }
@@ -206,12 +223,12 @@ function Index() {
             let fileName = await basename(selectFiles[i])
             let remoteFile = [lodash.trimEnd(server.config.directory, '/'), lodash.trimStart(currentPath, '/'), fileName].filter(part => part.length > 0).join('/')
             console.log('remoteFile', remoteFile)
-            setUploadStatus('uploading')
+            setHandleStatus('uploading')
             setUploadConfig({
                 local_file: selectFiles[i],
                 remote_file: remoteFile,
                 current: 0,
-                total: 0,   
+                total: 0,
             })
             let result = await uploadRemoteFileSync(connectKey, selectFiles[i], remoteFile)
             if (result.error != undefined && result.error.length > 0) {
@@ -220,17 +237,19 @@ function Index() {
                     content: '上传文件`' + selectFiles[i] + '`失败：' + result.error,
                 });
                 clearInterval(interval)
+                setHandleStatus('failure')
+                setHandleMessage('上传已取消')
                 return
             }
             refreshFiles()
         }
         await updateUploadProgress()
         clearInterval(interval)
-        setUploadStatus('success')
+        setHandleStatus('success')
     }
 
     const toCancelUpload = () => {
-        if (uploadStatus != 'uploading') {
+        if (handleStatus != 'uploading') {
             setShowModal(false)
             return
         }
@@ -238,11 +257,7 @@ function Index() {
             title: '确认取消上传吗？',
             content: '上传中的文件将会被取消上传',
             onOk: async () => {
-                console.log('cancel upload')
-                // cancel the upload
                 await cancelFileTransfer()
-                setUploadStatus('failure')
-                setHandleMessage('上传已取消')
             }
         })
     }
@@ -255,6 +270,27 @@ function Index() {
             return
         }
         setUploadConfig(result)
+    }
+
+    const getRemoteFilePath = (fileName) => {
+        return [lodash.trimEnd(server.config.directory, '/'), lodash.trimStart(currentPath, '/'), fileName].filter(part => part.length > 0).join('/')
+    }
+
+    const  downloadFile = async (record) => {
+        let remoteFile = getRemoteFilePath(record.name)
+        alert('下载文件:' + remoteFile)
+    }
+    const confiremCreateDirectory = async () => {
+        let remote_dir = getRemoteFilePath(directoryName)
+        let result = await createRemoteDir(connectKey, remote_dir)
+        if (result.error != undefined && result.error.length > 0) {
+            messageApi.open({
+                type: 'error',
+                content: '创建目录失败：' + result.error,
+            });
+            return
+        }
+        refreshFiles()
     }
 
     return <div style={{ padding: 20 }}>
@@ -277,12 +313,8 @@ function Index() {
             }
         </div>
         {
-             connectKey.length > 0 ?  <Card size='small' type="inner">
-                <Space style={{marginBottom:'10px'}}>
-                    <Button onClick={refreshFiles} size="small" icon={<SyncOutlined />}>刷新</Button>
-                    <Button size="small" icon={<UploadOutlined />} onClick={toUploadFile}>上传</Button>
-                </Space>
-                 <div>
+            connectKey.length > 0 ? <Card size='small' type="inner">
+                <div style={{ marginBottom: '10px' }}>
                     目录：
                     <Space split={"/"} align={'center'}>
                         <Link onClick={gotoDir.bind(this, { path: '' })} key={'/'}>{server != null ? server.config.directory : '/'}</Link>
@@ -293,12 +325,33 @@ function Index() {
                         }
                     </Space>
                 </div>
+                <Space>
+                    <Button onClick={refreshFiles} size="small" icon={<SyncOutlined />}>刷新</Button>
+                    <Button size="small" icon={<UploadOutlined />} onClick={toUploadFile}>上传</Button>
+                    <Popconfirm
+                        title="新建文件夹"
+                        description={
+                            <Input value={directoryName} onChange={(e) => setDirectoryName(e.target.value)}/>
+                        }
+                        onConfirm={confiremCreateDirectory}
+                        okText="确认"
+                        cancelText="取消"
+                        placement='bottom'
+                        onOpenChange={() => console.log('open change')}
+                    >
+                        <Button size="small" icon={<FolderAddOutlined />}>新建文件夹</Button>
+                    </Popconfirm>
+                </Space>
             </Card> : null
         }
 
         <Table dataSource={files}
             columns={columns}
             size="small"
+            bordered={true}
+            locale={{
+                emptyText : <Empty description="目录为空" />
+            }}
             pagination={false} rowKey={'name'} scroll={{ y: 1000 }} footer={null} loading={loading} />
         <Modal
             title="上传文件"
@@ -308,27 +361,29 @@ function Index() {
             onCancel={toCancelUpload}
         >
             <p>
-                <UploadMessage status={uploadStatus} message={handleMessage} />
+                <UploadMessage status={handleStatus} message={handleMessage} />
             </p>
+            {
+                handleStatus == 'uploading' ? <Row gutter={10}>
+                    <Col span={5}>
+                        <Card style={{ textAlign: 'center' }}>
+                            <Statistic value={count} suffix={'/' + total} title="文件数量" />
+                        </Card>
+                    </Col>
+                    <Col span={19}>
+                        <p>本地文件：{uploadConfig?.local_file}</p>
+                        <p>远程路径：{uploadConfig?.remote_file}</p>
+                        <p><Progress percent={(uploadConfig?.current / uploadConfig?.total * 100).toFixed(2)} status="active" showInfo={true} /></p>
+                    </Col>
+                </Row> : null
+            }
 
-            <Row gutter={10}>
-                <Col span={5}>
-                    <Card style={{ textAlign: 'center' }}>
-                        <Statistic value={count} suffix={'/' + total} title="文件数量" />
-                    </Card>
-                </Col>
-                <Col span={19}>
-                    <p>本地文件：{uploadConfig?.local_file}</p>
-                    <p>远程路径：{uploadConfig?.remote_file}</p>
-                    <p><Progress percent={(uploadConfig?.current / uploadConfig?.total * 100).toFixed(2)} status="active" showInfo={true} /></p>
-                </Col>
-            </Row>
         </Modal>
     </div>
 }
 
 function UploadMessage(props) {
-    const {status, message} = props
+    const { status, message } = props
     if (status == 'success') {
         return <Alert message="上传完成" type="success" />
     }
