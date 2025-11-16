@@ -274,6 +274,7 @@ function Index() {
             current: 0,
             total: 0,
         })
+        setAction('download')
         let result = await downloadRemoteFileSync(connectKey, locaFile, remoteFile)
         if (result.error != undefined && result.error.length > 0) {
             messageApi.open({
@@ -382,7 +383,7 @@ function Index() {
             width={'70%'}
             onCancel={toCancelUpload}
         >
-           <HandleProgress {...handleStatus} />
+           <HandleProgress {...handleStatus}  action={action}/>
         </Modal>
     </div>
 }
@@ -391,16 +392,16 @@ function HandleProgress(props) {
     const { local_file, remote_file } = props
 
     return <Card size='small' type="inner">
-        <HandleTitle {...props} />
+        <HandleTitle {...props} action={props.action}/>
         <p>本地文件：{local_file}</p>
         <p>远程路径：{remote_file}</p>
     </Card>
 }
 
 function HandleTitle(props) {
-    const { status, current, total } = props
+    const { status, current, total, action } = props
       if (status == 'success') {
-        return <Alert message="上传完成" type="success" />
+        return <Alert message={action == 'upload' ? '上传成功' : '下载成功'} type="success" />
     }
     if ( status == 'transferring') {
         let percent = 0
