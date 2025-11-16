@@ -3,9 +3,9 @@ import { createFileRoute } from '@tanstack/react-router'
 import { open } from "@tauri-apps/plugin-dialog";
 import { Button, Space, Select, Modal, Table, Typography, Card, message, Progress, Statistic, Col, Row, Spin, Alert, Popconfirm, Input, Empty } from 'antd';
 import { SyncOutlined, UploadOutlined, FolderAddOutlined } from '@ant-design/icons';
-import { sshConnectByPassword, sshListFiles, sshDisconnect, deleteRemoteFile, uploadRemoteFileSync, getTransferProgress, cancelFileTransfer, createRemoteDir } from "../service/invoke"
+import { sshConnectByPassword, sshListFiles, sshDisconnect, deleteRemoteFile, uploadRemoteFileSync, getTransferProgress, cancelFileTransfer, createRemoteDir, downloadRemoteFileSync } from "../service/invoke"
 import lodash from 'lodash'
-import { basename } from '@tauri-apps/api/path'
+import { basename, join } from '@tauri-apps/api/path'
 import { useSSHStore } from '../store/ssh';
 import { partial } from "filesize";
 const { Link } = Typography;
@@ -42,13 +42,10 @@ function Index() {
     const [loading, setLoading] = useState(false);
 
     const [showModal, setShowModal] = useState(false);
-    const [handleStatus, setHandleStatus] = useState('');
-    const [handleMessage, setHandleMessage] = useState('');
-    const [uploadConfig, setUploadConfig] = useState(null);
-    const [count, setCount] = useState(0)
-    const [total, setTotal] = useState(0)
+    const [handleStatus, setHandleStatus] = useState(null);
+    const [action, setAction] = useState('')
 
-    const  [directoryName, setDirectoryName] = useState('')
+    const [directoryName, setDirectoryName] = useState('')
     const columns = [
         {
             'title': '名字',
@@ -90,7 +87,7 @@ function Index() {
             'render': (col, record, index) => {
                 return <Space>
                     <Button onClick={toDeleteFile.bind(this, record)} size="small" color='danger' variant="outlined">删除</Button>
-                    {!record.is_dir && <Button onClick={downloadFile.bind(this, record)} size="small" color='primary' variant="outlined">下载</Button>}
+                    {!record.is_dir && <Button onClick={toDownloadFile.bind(this, record)} size="small" color='primary' variant="outlined">下载</Button>}
                 </Space>
             }
         }
@@ -160,6 +157,13 @@ function Index() {
             })
             return
         }
+        if (connectKey.error != undefined && connectKey.error.length > 0) {
+            messageApi.open({
+                type: 'error',
+                content: '连接失败：' + connectKey.error,
+            });
+            return
+        }
         setConnectKey(connectKey)
         setCurrentPath('')
         listFiles(connectKey, server.config.directory, '')
@@ -198,8 +202,8 @@ function Index() {
     }
 
     var toUploadFile = async () => {
-        let selectFiles = await open({
-            multipart: true,
+        let selectFile = await open({
+            multipart: false,
             filters: [
                 {
                     name: "",
@@ -207,49 +211,37 @@ function Index() {
                 },
             ],
         });
-        if (selectFiles == null || selectFiles.length < 1) {
+        setShowModal(true)
+        let interval = setInterval(updateProgress, 1000)
+        let fileName = await basename(selectFile)
+        let remoteFile = getRemoteFilePath(fileName)
+        setHandleStatus({
+            status : 'transferring',
+            message : '',
+            local_file: selectFile,
+            remote_file: remoteFile,
+            current: 0,
+            total: 0,
+        })
+        setAction('upload')
+        let result = await uploadRemoteFileSync(connectKey, selectFile, remoteFile)
+        if (result.error != undefined && result.error.length > 0) {
+            messageApi.open({
+                type: 'error',
+                content:  result.error,
+            });
+            clearInterval(interval)
+            setHandleStatus(lodash.merge(handleStatus, { status: 'error', message: result.error }))
             return
         }
-        if (typeof selectFiles == 'string') {
-            selectFiles = [selectFiles]
-        }
-        console.log('selectFiles', selectFiles)
-        setShowModal(true)
-        let interval = setInterval(updateUploadProgress, 1000)
-        setTotal(selectFiles.length)
-        for (var i in selectFiles) {
-            console.log('upload file', selectFiles[i])
-            setCount(parseInt(i) + 1)
-            let fileName = await basename(selectFiles[i])
-            let remoteFile = [lodash.trimEnd(server.config.directory, '/'), lodash.trimStart(currentPath, '/'), fileName].filter(part => part.length > 0).join('/')
-            console.log('remoteFile', remoteFile)
-            setHandleStatus('uploading')
-            setUploadConfig({
-                local_file: selectFiles[i],
-                remote_file: remoteFile,
-                current: 0,
-                total: 0,
-            })
-            let result = await uploadRemoteFileSync(connectKey, selectFiles[i], remoteFile)
-            if (result.error != undefined && result.error.length > 0) {
-                messageApi.open({
-                    type: 'error',
-                    content: '上传文件`' + selectFiles[i] + '`失败：' + result.error,
-                });
-                clearInterval(interval)
-                setHandleStatus('failure')
-                setHandleMessage('上传已取消')
-                return
-            }
-            refreshFiles()
-        }
-        await updateUploadProgress()
         clearInterval(interval)
-        setHandleStatus('success')
+        await updateProgress()
+        refreshFiles()
     }
 
     const toCancelUpload = () => {
-        if (handleStatus != 'uploading') {
+        const {status} = handleStatus
+        if (status != 'transferring') {
             setShowModal(false)
             return
         }
@@ -262,24 +254,54 @@ function Index() {
         })
     }
 
-    const updateUploadProgress = async () => {
+    var toDownloadFile = async (record) => {
+        let selectDir = await open({
+            multipart: false,
+            directory: true,
+        });
+        if (selectDir == null || selectDir.length < 1) {
+            return
+        }
+        setShowModal(true)
+        let interval = setInterval(updateProgress, 1000)
+        let locaFile = await join(selectDir, record.name)
+        let remoteFile = getRemoteFilePath(record.name)
+        setHandleStatus({
+            local_file: locaFile,
+            remote_file: remoteFile,
+            status  : 'transferring',
+            message : '',
+            current: 0,
+            total: 0,
+        })
+        let result = await downloadRemoteFileSync(connectKey, locaFile, remoteFile)
+        if (result.error != undefined && result.error.length > 0) {
+            messageApi.open({
+                type: 'error',
+                content:  result.error,
+            });
+            clearInterval(interval)
+            setHandleStatus(lodash.merge(handleStatus, { status: 'error', message: result.error }))
+            return
+        }
+        clearInterval(interval)
+        await updateProgress()
+    }
+
+    const updateProgress = async () => {
         let result = await getTransferProgress()
         console.log('get progress', result)
         if (result.error != undefined && result.error.length > 0) {
             console.log('get progress error', result.error)
             return
         }
-        setUploadConfig(result)
+        setHandleStatus(result)
     }
 
     const getRemoteFilePath = (fileName) => {
         return [lodash.trimEnd(server.config.directory, '/'), lodash.trimStart(currentPath, '/'), fileName].filter(part => part.length > 0).join('/')
     }
 
-    const  downloadFile = async (record) => {
-        let remoteFile = getRemoteFilePath(record.name)
-        alert('下载文件:' + remoteFile)
-    }
     const confiremCreateDirectory = async () => {
         let remote_dir = getRemoteFilePath(directoryName)
         let result = await createRemoteDir(connectKey, remote_dir)
@@ -331,7 +353,7 @@ function Index() {
                     <Popconfirm
                         title="新建文件夹"
                         description={
-                            <Input value={directoryName} onChange={(e) => setDirectoryName(e.target.value)}/>
+                            <Input value={directoryName} onChange={(e) => setDirectoryName(e.target.value)} />
                         }
                         onConfirm={confiremCreateDirectory}
                         okText="确认"
@@ -350,46 +372,43 @@ function Index() {
             size="small"
             bordered={true}
             locale={{
-                emptyText : <Empty description="目录为空" />
+                emptyText: <Empty description="目录为空" />
             }}
             pagination={false} rowKey={'name'} scroll={{ y: 1000 }} footer={null} loading={loading} />
         <Modal
-            title="上传文件"
+            title={action == 'upload' ? '上传文件' : '下载文件'}
             open={showModal}
             footer={null}
             width={'70%'}
             onCancel={toCancelUpload}
         >
-            <p>
-                <UploadMessage status={handleStatus} message={handleMessage} />
-            </p>
-            {
-                handleStatus == 'uploading' ? <Row gutter={10}>
-                    <Col span={5}>
-                        <Card style={{ textAlign: 'center' }}>
-                            <Statistic value={count} suffix={'/' + total} title="文件数量" />
-                        </Card>
-                    </Col>
-                    <Col span={19}>
-                        <p>本地文件：{uploadConfig?.local_file}</p>
-                        <p>远程路径：{uploadConfig?.remote_file}</p>
-                        <p><Progress percent={(uploadConfig?.current / uploadConfig?.total * 100).toFixed(2)} status="active" showInfo={true} /></p>
-                    </Col>
-                </Row> : null
-            }
-
+           <HandleProgress {...handleStatus} />
         </Modal>
     </div>
 }
 
-function UploadMessage(props) {
-    const { status, message } = props
-    if (status == 'success') {
+function HandleProgress(props) {
+    const { local_file, remote_file } = props
+
+    return <Card size='small' type="inner">
+        <HandleTitle {...props} />
+        <p>本地文件：{local_file}</p>
+        <p>远程路径：{remote_file}</p>
+    </Card>
+}
+
+function HandleTitle(props) {
+    const { status, current, total } = props
+      if (status == 'success') {
         return <Alert message="上传完成" type="success" />
     }
-    if (status == 'uploading') {
-        return <Spin />
+    if ( status == 'transferring') {
+        let percent = 0
+        if (total > 0) {
+            percent = (current / total * 100).toFixed(2)
+        }
+        return <Progress percent={percent} status="active" showInfo={true} />
     }
 
-    return <Alert message={message} type="error" />
+    return <Alert message={props.message} type="error" />
 }

@@ -139,6 +139,73 @@ pub async fn remote_list_files(session_key: String, path: String) -> Result<Vec<
 }
 
 #[tauri::command]
+pub async fn download_remote_file_sync(
+    session_key: String,
+    local_file: String,
+    remote_file: String,
+) -> Result<String, String> {
+    let list = SESSION_MAP
+        .lock()
+        .map_err(|e| format!("get session map error:{}", e))?;
+    let session = list.get(&session_key).ok_or("no session")?;
+
+    // 1. get remote file size
+    let (mut remote_channel, stat) = session
+        .scp_recv(Path::new(&remote_file.as_str()))
+        .map_err(|e| format!("scp recv error:{}", e))?;
+    println!("download remote file:{} size:{}", remote_file, stat.size());
+    let mut buffer = [0u8; BUFFER_SIZE];
+    let file_path = Path::new(&local_file);
+
+    // 2. create dir if not exists
+    let save_dir = file_path.parent().ok_or("no parent dir")?;
+    fs::create_dir_all(save_dir).map_err(|e| format!("create dir error:{}", e))?;
+    let mut tmp_file =
+        fs::File::create(file_path).map_err(|e| format!("create file error:{}", e))?;
+    init_transfer_info(local_file, remote_file, stat.size() as u64);
+    unsafe {
+        CANCEL_SIGNAL = 0;
+    }
+    let mut download_error = false;
+
+    // 3. start download file
+    loop {
+        unsafe {
+            if CANCEL_SIGNAL > 0 {
+                download_error = true;
+                mark_transfer_failure(String::from("user cancel"));
+                break;
+            }
+        }
+        let result = remote_channel.read(buffer.as_mut_slice());
+        if let Err(err) = result {
+            println!("download error:{}", err);
+            mark_transfer_failure(err.to_string());
+            download_error = true;
+            break;
+        }
+
+        if let Ok(size) = result {
+            if size < 1 {
+                break;
+            }
+            let _ = tmp_file.write(&buffer[..size]);
+            incr_transfer_size(size as u64);
+        }
+    }
+    if !download_error {
+        mark_transfer_success();
+    }
+
+    remote_channel.send_eof().unwrap();
+    remote_channel.wait_eof().unwrap();
+    remote_channel.close().unwrap();
+    remote_channel.wait_close().unwrap();
+
+    Ok(String::from("success"))
+}
+
+#[tauri::command]
 pub async fn download_remote_file(
     session_key: String,
     local_file: String,
@@ -294,15 +361,16 @@ pub async fn upload_remote_file_sync(
         remote_file.to_string(),
         metadata.len(),
     );
-    let mut user_cancelled = false;
     unsafe {
         CANCEL_SIGNAL = 0;
     }
+    let mut upload_error = false;
     loop {
         let result = reader.fill_buf().map_err(|e| e.to_string())?;
-         unsafe {
+        unsafe {
             if CANCEL_SIGNAL > 0 {
-                user_cancelled = true;
+                mark_transfer_failure(String::from("use cancel"));
+                upload_error = true;
                 break;
             }
         }
@@ -310,23 +378,25 @@ pub async fn upload_remote_file_sync(
             break;
         }
         let size = result.len();
-        remote_channel
-            .write(reader.buffer())
-            .map_err(|e| e.to_string())?;
-        print!("upload size: {}", size);
+        let tmp_result = remote_channel.write(reader.buffer());
+        if let Err(err) = tmp_result {
+            mark_transfer_failure(err.to_string());
+            upload_error = true;
+            break;
+        }
         reader.consume(size);
         incr_transfer_size(size as u64);
     }
-    mark_transfer_failure(String::from("user cancelled"));
+
+    if upload_error == false {
+        mark_transfer_success();
+    }
+
     remote_channel.send_eof().unwrap();
     remote_channel.wait_eof().unwrap();
     remote_channel.close().unwrap();
     remote_channel.wait_close().unwrap();
-    if user_cancelled {
-        mark_transfer_failure(String::from("user cancelled"));
-        return Err(String::from("user cancelled"));
-    }
-    
+
     Ok(String::from("success"))
 }
 

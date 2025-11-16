@@ -26,8 +26,8 @@ export const sshListFiles = async (sessionKey, path) => {
     return result;
 };
 
-export const downloadRemoteFile = async (sessionKey, localFile, remoteFile) => {
-    let result = await invoke("download_remote_file", {
+export const downloadRemoteFileSync = async (sessionKey, localFile, remoteFile) => {
+    let result = await invoke("download_remote_file_sync", {
         sessionKey,
         localFile,
         remoteFile,

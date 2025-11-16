@@ -8,7 +8,7 @@ use command::ftp::{
 };
 use command::ssh::{
     exist_ssh_session, remote_exec_command, remote_list_files, ssh_connect_by_password,
-    upload_remote_file, get_transfer_remote_progress, send_cancel_signal, upload_remote_file_sync,
+    upload_remote_file, get_transfer_remote_progress, send_cancel_signal, upload_remote_file_sync, download_remote_file_sync
 };
 use tauri_plugin_sql::{Migration, MigrationKind};
 
@@ -37,6 +37,7 @@ pub fn run() {
             get_transfer_remote_progress,
             upload_remote_file_sync,
             send_cancel_signal,
+            download_remote_file_sync,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
