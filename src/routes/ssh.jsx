@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router'
 import { open } from "@tauri-apps/plugin-dialog";
-import { Button, Space, Select, Modal, Table, Typography, Card, message, Progress, Dropdown, Col, Row, Spin, Alert, Popconfirm, Input, Empty } from 'antd';
+import { Button, Space, Select, Modal, Table, Typography, Card, message, Progress, Dropdown, Col, Row, Spin, Alert, Popconfirm, Input, Empty, Tag } from 'antd';
 import { SyncOutlined, UploadOutlined, FolderAddOutlined, CopyOutlined } from '@ant-design/icons';
 import { sshConnectByPassword, sshListFiles, sshDisconnect, deleteRemoteFile, uploadRemoteFileSync, getTransferProgress, cancelFileTransfer, createRemoteDir, downloadRemoteFileSync, renameRemoteFile } from "../service/invoke"
 import lodash from 'lodash'
@@ -298,7 +298,7 @@ function Index() {
                 },
             ],
         });
-        if(selectFile == null) {
+        if (selectFile == null) {
             return
         }
         setShowModal(true)
@@ -411,7 +411,7 @@ function Index() {
         {contextHolder}
         <div>
             选择数据源：
-            <Select style={{ width: '50%', display: 'inline-block', marginRight: 10 }} value={serverID} onChange={onChangeServer} disabled={connectKey.length > 0}>
+            <Select style={{ width: '50%', display: 'inline-block', marginRight: 10, marginBottom: 5 }} value={serverID} onChange={onChangeServer} disabled={connectKey.length > 0}>
                 {
                     servers.map(item => {
                         return <Select.Option value={item.id}>{item.name} - {item.config.address} - {item.config.directory}</Select.Option>
@@ -426,9 +426,8 @@ function Index() {
             }
         </div>
         {
-            connectKey.length > 0 ? <Card size='small' type="inner">
+            connectKey.length > 0 ? <Card size='small' type="inner" style={{ marginBottom: 5 }}>
                 <div style={{ marginBottom: '10px' }}>
-                    目录：
                     <Space split={"/"} align={'center'}>
                         <Link onClick={gotoDir.bind(this, { path: '' })} key={'/'}>{server != null ? server.config.directory : '/'}</Link>
                         {
@@ -439,6 +438,7 @@ function Index() {
                     </Space>
                 </div>
                 <Space>
+                    <Tag color="red">文件数：{files.length}</Tag>
                     <Button onClick={refreshFiles} size="small" icon={<SyncOutlined />}>刷新</Button>
                     <Button onClick={copyDir} size="small" icon={<CopyOutlined />}>复制路径</Button>
                     <Button size="small" icon={<UploadOutlined />} onClick={toUploadFile}>上传</Button>

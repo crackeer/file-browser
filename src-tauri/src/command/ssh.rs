@@ -508,9 +508,7 @@ pub async fn disconnect_server(session_key: String) -> Result<bool, String> {
     match session_map.as_mut() {
         Ok(list) => match list.get(&session_key) {
             Some(sess) => {
-                if let Err(e) = sess.disconnect(Some(AuthCancelledByUser), &"user action", None) {
-                    return Err(e.to_string());
-                }
+                _ = sess.disconnect(Some(AuthCancelledByUser), &"user action", None);
                 list.remove(&session_key);
                 Ok(true)
             }
