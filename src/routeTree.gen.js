@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SshRouteImport } from './routes/ssh'
 import { Route as SettingRouteImport } from './routes/setting'
+import { Route as IndexRouteImport } from './routes/index'
 
 const SshRoute = SshRouteImport.update({
   id: '/ssh',
@@ -22,8 +23,14 @@ const SettingRoute = SettingRouteImport.update({
   path: '/setting',
   getParentRoute: () => rootRouteImport,
 })
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => rootRouteImport,
+})
 
 const rootRouteChildren = {
+  IndexRoute: IndexRoute,
   SettingRoute: SettingRoute,
   SshRoute: SshRoute,
 }

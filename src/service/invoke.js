@@ -107,6 +107,14 @@ export const deleteRemoteFile = async (sessionKey, file) => {
     return result;
 };
 
+export const renameRemoteFile = async (sessionKey, oldFile, newFile) => {
+    let result = await invoke("remote_exec_command", {
+        sessionKey,
+        cmdString: "mv " + oldFile + " " + newFile,
+    });
+    return result;
+};
+
 export const createRemoteDir = async (sessionKey, path) => {
     let result = await invoke("remote_exec_command", {
         sessionKey,

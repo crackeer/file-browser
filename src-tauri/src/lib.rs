@@ -7,14 +7,16 @@ use command::ftp::{
     ftp_upload_file,
 };
 use command::ssh::{
-    exist_ssh_session, remote_exec_command, remote_list_files, ssh_connect_by_password,
-    upload_remote_file, get_transfer_remote_progress, send_cancel_signal, upload_remote_file_sync, download_remote_file_sync
+    download_remote_file_sync, exist_ssh_session, get_transfer_remote_progress,
+    remote_exec_command, remote_list_files, send_cancel_signal, ssh_connect_by_password,
+    upload_remote_file, upload_remote_file_sync,
 };
 use tauri_plugin_sql::{Migration, MigrationKind};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(

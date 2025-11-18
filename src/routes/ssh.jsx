@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router'
 import { open } from "@tauri-apps/plugin-dialog";
-import { Button, Space, Select, Modal, Table, Typography, Card, message, Progress, Statistic, Col, Row, Spin, Alert, Popconfirm, Input, Empty } from 'antd';
-import { SyncOutlined, UploadOutlined, FolderAddOutlined } from '@ant-design/icons';
-import { sshConnectByPassword, sshListFiles, sshDisconnect, deleteRemoteFile, uploadRemoteFileSync, getTransferProgress, cancelFileTransfer, createRemoteDir, downloadRemoteFileSync } from "../service/invoke"
+import { Button, Space, Select, Modal, Table, Typography, Card, message, Progress, Dropdown, Col, Row, Spin, Alert, Popconfirm, Input, Empty } from 'antd';
+import { SyncOutlined, UploadOutlined, FolderAddOutlined, CopyOutlined } from '@ant-design/icons';
+import { sshConnectByPassword, sshListFiles, sshDisconnect, deleteRemoteFile, uploadRemoteFileSync, getTransferProgress, cancelFileTransfer, createRemoteDir, downloadRemoteFileSync, renameRemoteFile } from "../service/invoke"
 import lodash from 'lodash'
 import { basename, join } from '@tauri-apps/api/path'
+import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { useSSHStore } from '../store/ssh';
 import { partial } from "filesize";
 const { Link } = Typography;
@@ -46,20 +47,31 @@ function Index() {
     const [action, setAction] = useState('')
 
     const [directoryName, setDirectoryName] = useState('')
+    const [showRenameModal, setShowRenameModal] = useState(false)
+    const [current, setCurrent] = useState(null)
+    const [name, setName] = useState('')
+
+    const moreAction = [
+        { 'label': '重命名', 'key': 'rename' },
+        { 'label': '复制路径', 'key': 'copy_path' },
+        { 'label': '更多信息', 'key': 'more' }
+    ]
     const columns = [
         {
             'title': '名字',
             'dataIndex': 'name',
             'key': 'name',
             'width': '30%',
-            'render': (col, record, index) => (
-                record.is_dir ? <a href="javascript:;" onClick={changeDir.bind(this, record.name)} style={{ textDecoration: 'none' }}>{record.name}</a> : <span>{record.name}</span>
-            )
+            'render': (col, record, index) => {
+                return <>
+                    {record.is_dir ? <a href="javascript:;" onClick={changeDir.bind(this, record.name)} style={{ textDecoration: 'none' }}>{record.name}</a> : <span>{record.name}</span>}
+                </>
+            }
         },
         {
-            'title': '权限',
-            'dataIndex': 'access',
-            'key': 'access',
+            'title': '大小',
+            'dataIndex': 'size_text',
+            'key': 'size_text',
         },
         {
             'title': '时间',
@@ -72,22 +84,25 @@ function Index() {
             )
         },
         {
-            'title': '大小',
-            'dataIndex': 'size_text',
-            'key': 'size_text',
-        },
-        {
-            'title': '用户',
-            'dataIndex': 'user',
-            'key': 'user',
-        },
-        {
             'title': '操作',
             'key': 'opt',
             'render': (col, record, index) => {
                 return <Space>
-                    <Button onClick={toDeleteFile.bind(this, record)} size="small" color='danger' variant="outlined">删除</Button>
                     {!record.is_dir && <Button onClick={toDownloadFile.bind(this, record)} size="small" color='primary' variant="outlined">下载</Button>}
+                    <Button onClick={toDeleteFile.bind(this, record)} size="small" color='danger' variant="outlined">删除</Button>
+                    <Dropdown.Button menu={{
+                        items: moreAction,
+                        onClick: (e) => {
+                            console.log('moreAction', e)
+                            if (e.key === 'rename') {
+                                toRename(record)
+                            } else if (e.key == 'more') {
+                                moreInfo(record)
+                            } else if (e.key == 'copy_path') {
+                                copyPath(record)
+                            }
+                        }
+                    }} size="small" trigger={'click'} placement="bottomRight">更多</Dropdown.Button>
                 </Space>
             }
         }
@@ -95,6 +110,17 @@ function Index() {
     useEffect(() => {
         getServers()
     }, [])
+
+    const moreInfo = (record) => {
+        modal.info({
+            title: '文件信息',
+            content: <div>
+                <p>用户：{record.user}</p>
+                <p>分组：{record.group}</p>
+                <p>权限：{record.access}</p>
+            </div>
+        })
+    }
 
     const gotoDir = async (item) => {
         setCurrentPath(item.path)
@@ -138,6 +164,67 @@ function Index() {
                 listFiles(connectKey, server.config.directory, currentPath)
             }
         })
+    }
+
+    const toRename = (record) => {
+        setCurrent(record)
+        setName(record.name)
+        setShowRenameModal(true)
+    }
+
+    const copyPath = async (record) => {
+        let currentPath = getRemoteFilePath(record.name)
+        await writeText(currentPath)
+        messageApi.open({
+            type: 'success',
+            content: '路径`' + currentPath + '`已复制到剪切板',
+        });
+    }
+    const copyDir = async () => {
+        let currentPath = getRemoteFilePath('')
+        await writeText(currentPath)
+        messageApi.open({
+            type: 'success',
+            content: '路径`' + currentPath + '`已复制到剪切板',
+        });
+    }
+
+    const doRename = async () => {
+        if (name == current.name) {
+            setShowRenameModal(false)
+            return
+        }
+        if (name.length < 1) {
+            messageApi.open({
+                type: 'error',
+                content: '请输入新的名字',
+            });
+        }
+        for (var i in files) {
+            if (files[i].name == name) {
+                messageApi.open({
+                    type: 'error',
+                    content: '文件名已存在',
+                });
+                return
+            }
+        }
+        let oldPath = getRemoteFilePath(current.name)
+        let newPath = getRemoteFilePath(name)
+        let result = await renameRemoteFile(connectKey, oldPath, newPath)
+        if (result.error != undefined && result.error.length > 0) {
+            messageApi.open({
+                type: 'error',
+                content: '重命名失败：' + result.error,
+            });
+            return
+        }
+        messageApi.open({
+            type: 'success',
+            content: '重命名成功',
+        });
+        setShowRenameModal(false)
+        refreshFiles()
     }
 
     const disconnectSSH = async () => {
@@ -211,13 +298,16 @@ function Index() {
                 },
             ],
         });
+        if(selectFile == null) {
+            return
+        }
         setShowModal(true)
         let interval = setInterval(updateProgress, 1000)
         let fileName = await basename(selectFile)
         let remoteFile = getRemoteFilePath(fileName)
         setHandleStatus({
-            status : 'transferring',
-            message : '',
+            status: 'transferring',
+            message: '',
             local_file: selectFile,
             remote_file: remoteFile,
             current: 0,
@@ -228,7 +318,7 @@ function Index() {
         if (result.error != undefined && result.error.length > 0) {
             messageApi.open({
                 type: 'error',
-                content:  result.error,
+                content: result.error,
             });
             clearInterval(interval)
             setHandleStatus(lodash.merge(handleStatus, { status: 'error', message: result.error }))
@@ -240,7 +330,7 @@ function Index() {
     }
 
     const toCancelUpload = () => {
-        const {status} = handleStatus
+        const { status } = handleStatus
         if (status != 'transferring') {
             setShowModal(false)
             return
@@ -269,8 +359,8 @@ function Index() {
         setHandleStatus({
             local_file: locaFile,
             remote_file: remoteFile,
-            status  : 'transferring',
-            message : '',
+            status: 'transferring',
+            message: '',
             current: 0,
             total: 0,
         })
@@ -279,7 +369,7 @@ function Index() {
         if (result.error != undefined && result.error.length > 0) {
             messageApi.open({
                 type: 'error',
-                content:  result.error,
+                content: result.error,
             });
             clearInterval(interval)
             setHandleStatus(lodash.merge(handleStatus, { status: 'error', message: result.error }))
@@ -350,6 +440,7 @@ function Index() {
                 </div>
                 <Space>
                     <Button onClick={refreshFiles} size="small" icon={<SyncOutlined />}>刷新</Button>
+                    <Button onClick={copyDir} size="small" icon={<CopyOutlined />}>复制路径</Button>
                     <Button size="small" icon={<UploadOutlined />} onClick={toUploadFile}>上传</Button>
                     <Popconfirm
                         title="新建文件夹"
@@ -383,7 +474,20 @@ function Index() {
             width={'70%'}
             onCancel={toCancelUpload}
         >
-           <HandleProgress {...handleStatus}  action={action}/>
+            <HandleProgress {...handleStatus} action={action} />
+        </Modal>
+
+        <Modal
+            title={<>重命名{current?.name}</>}
+            closable={true}
+            open={showRenameModal}
+            okText="确认"
+            cancelText="取消"
+            width={'50%'}
+            onCancel={() => { setShowRenameModal(false) }}
+            onOk={doRename}
+        >
+            <Input value={name} onChange={(e) => setName(e.target.value)} />
         </Modal>
     </div>
 }
@@ -392,7 +496,7 @@ function HandleProgress(props) {
     const { local_file, remote_file } = props
 
     return <Card size='small' type="inner">
-        <HandleTitle {...props} action={props.action}/>
+        <HandleTitle {...props} action={props.action} />
         <p>本地文件：{local_file}</p>
         <p>远程路径：{remote_file}</p>
     </Card>
@@ -400,10 +504,10 @@ function HandleProgress(props) {
 
 function HandleTitle(props) {
     const { status, current, total, action } = props
-      if (status == 'success') {
+    if (status == 'success') {
         return <Alert message={action == 'upload' ? '上传成功' : '下载成功'} type="success" />
     }
-    if ( status == 'transferring') {
+    if (status == 'transferring') {
         let percent = 0
         if (total > 0) {
             percent = (current / total * 100).toFixed(2)
