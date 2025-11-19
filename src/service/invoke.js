@@ -102,7 +102,7 @@ export const deleteRemoteFile = async (sessionKey, file) => {
     console.log('deleteRemoteFile', sessionKey, file)
     let result = await invoke("remote_exec_command", {
         sessionKey,
-        cmdString: "rm -rf " + file,
+        cmdString: "rm -rf '" + file + "'"
     });
     return result;
 };
@@ -111,6 +111,22 @@ export const renameRemoteFile = async (sessionKey, oldFile, newFile) => {
     let result = await invoke("remote_exec_command", {
         sessionKey,
         cmdString: "mv " + oldFile + " " + newFile,
+    });
+    return result;
+};
+
+export const catRemoteFile = async (sessionKey, file) => {
+    let result = await invoke("remote_exec_command", {
+        sessionKey,
+        cmdString: "cat '" + file + "'"
+    });
+    return result;
+};
+
+export const k3sLoadRemoteFile  = async (sessionKey, image) => {
+    let result = await invoke("remote_exec_command", {
+        sessionKey,
+        cmdString: "k3s ctr image import '" + image + "'",
     });
     return result;
 };

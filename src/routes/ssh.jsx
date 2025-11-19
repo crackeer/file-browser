@@ -3,7 +3,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { open } from "@tauri-apps/plugin-dialog";
 import { Button, Space, Select, Modal, Table, Typography, Card, message, Progress, Dropdown, Col, Row, Spin, Alert, Popconfirm, Input, Empty, Tag } from 'antd';
 import { SyncOutlined, UploadOutlined, FolderAddOutlined, CopyOutlined } from '@ant-design/icons';
-import { sshConnectByPassword, sshListFiles, sshDisconnect, deleteRemoteFile, uploadRemoteFileSync, getTransferProgress, cancelFileTransfer, createRemoteDir, downloadRemoteFileSync, renameRemoteFile } from "../service/invoke"
+import { sshConnectByPassword, sshListFiles, sshDisconnect, deleteRemoteFile, uploadRemoteFileSync, getTransferProgress, cancelFileTransfer, createRemoteDir, downloadRemoteFileSync, renameRemoteFile, catRemoteFile, k3sLoadRemoteFile } from "../service/invoke"
 import lodash from 'lodash'
 import { basename, join } from '@tauri-apps/api/path'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
@@ -12,6 +12,8 @@ import { partial } from "filesize";
 const { Link } = Typography;
 
 const fileSize = partial({ base: 2, standard: "jedec" });
+
+var CAT_FILE_SIZE_MAX = 1024 * 1024 * 2;
 
 export const Route = createFileRoute('/ssh')({
     component: Index,
@@ -50,12 +52,22 @@ function Index() {
     const [showRenameModal, setShowRenameModal] = useState(false)
     const [current, setCurrent] = useState(null)
     const [name, setName] = useState('')
-
     const moreAction = [
         { 'label': '重命名', 'key': 'rename' },
         { 'label': '复制路径', 'key': 'copy_path' },
+        { 'label': '查看内容', 'key': 'cat' },
+        { 'label': 'k3s镜像加载', 'key': 'k3s_image_load' },
         { 'label': '更多信息', 'key': 'more' }
     ]
+    const getActionHandler = () => {
+        return {
+            'rename': toRename,
+            'copy_path': copyPath,
+            'more': moreInfo,
+            'cat': catFile,
+            'k3s_image_load': k3sImageLoad
+        }
+    }
     const columns = [
         {
             'title': '名字',
@@ -93,13 +105,9 @@ function Index() {
                     <Dropdown.Button menu={{
                         items: moreAction,
                         onClick: (e) => {
-                            console.log('moreAction', e)
-                            if (e.key === 'rename') {
-                                toRename(record)
-                            } else if (e.key == 'more') {
-                                moreInfo(record)
-                            } else if (e.key == 'copy_path') {
-                                copyPath(record)
+                            let actionHandler = getActionHandler()
+                            if (actionHandler[e.key] != undefined) {
+                                actionHandler[e.key](record)
                             }
                         }
                     }} size="small" trigger={'click'} placement="bottomRight">更多</Dropdown.Button>
@@ -225,6 +233,52 @@ function Index() {
         });
         setShowRenameModal(false)
         refreshFiles()
+    }
+
+    const catFile = async (record) => {
+        if(record.size > CAT_FILE_SIZE_MAX) {
+            messageApi.open({
+                type: 'error',
+                content: '文件超过2M，无法查看',
+            });
+            return
+        }
+        let remoteFile = getRemoteFilePath(record.name)
+        let result = await catRemoteFile(connectKey, remoteFile)
+        if (result.error != undefined && result.error.length > 0) {
+            messageApi.open({
+                type: 'error',
+                content: '查看文件失败：' + result.error,
+            });
+            return
+        }
+        modal.info({
+            title: '文件内容',
+            width: '50%',
+            content: <Input.TextArea value={result} readOnly={true} rows={10}>{result}</Input.TextArea>
+        })
+    }
+
+    const k3sImageLoad = async (record) => {
+        let remoteFile = getRemoteFilePath(record.name)
+        let hide = messageApi.loading({
+            content: '加载中`' + record.name + '`中',
+            duration: -1,
+        })
+        let result = await k3sLoadRemoteFile(connectKey, remoteFile)
+        hide()
+        if (result.error != undefined && result.error.length > 0) {
+            modal.error({
+                title: '加载失败',
+                width: '50%',
+                content: <Input.TextArea value={result.error} readOnly={true} rows={3}>{result.error}</Input.TextArea>
+            });
+            return
+        }
+        modal.info({
+            title: '加载结果',
+            content: <Input.TextArea value={result} readOnly={true} rows={3}>{result}</Input.TextArea>
+        })
     }
 
     const disconnectSSH = async () => {
