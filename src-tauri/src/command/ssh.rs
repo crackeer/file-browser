@@ -10,7 +10,6 @@ use std::io::{BufRead, BufReader};
 use std::net::TcpStream;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, Emitter};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TransferInfo {
@@ -79,8 +78,7 @@ pub struct File {
     group: String,
     user: String,
     size: String,
-    month: String,
-    day: String,
+    date: String,
     time: String,
     name: String,
     is_dir: bool,
@@ -110,7 +108,7 @@ pub async fn remote_list_files(session_key: String, path: String) -> Result<Vec<
         .channel_session()
         .map_err(|e| format!("get channel error:{}", e))?;
     channel
-        .exec(&format!("ls -l {}", path))
+        .exec(&format!("ls -l {} {}", "--time-style='+%Y-%m-%d %H:%M'", path))
         .map_err(|e| format!("exec error:{}", e))?;
     let mut result = String::new();
     _ = channel
@@ -120,7 +118,7 @@ pub async fn remote_list_files(session_key: String, path: String) -> Result<Vec<
     let mut file_list: Vec<File> = Vec::new();
     for item in list.iter() {
         let parts: Vec<&str> = item.split(" ").filter(|x| x.len() > 0).collect();
-        if parts.len() < 9 {
+        if parts.len() < 8 {
             continue;
         }
         file_list.push(File {
@@ -128,10 +126,9 @@ pub async fn remote_list_files(session_key: String, path: String) -> Result<Vec<
             group: String::from(parts[2]),
             user: String::from(parts[3]),
             size: String::from(parts[4]),
-            month: String::from(parts[5]),
-            day: String::from(parts[6]),
-            time: String::from(parts[7]),
-            name: String::from(parts[8..].join(" ")),
+            date: String::from(parts[5]),
+            time: String::from(parts[6]),
+            name: String::from(parts[7..].join(" ")),
             is_dir: parts[0].starts_with("d"),
         })
     }

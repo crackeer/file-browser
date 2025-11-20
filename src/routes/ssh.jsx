@@ -10,6 +10,7 @@ import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { useSSHStore } from '../store/ssh';
 import { partial } from "filesize";
 const { Link } = Typography;
+const { Search } = Input;
 
 const fileSize = partial({ base: 2, standard: "jedec" });
 
@@ -45,6 +46,8 @@ function Index() {
     const [loading, setLoading] = useState(false);
 
     const [showModal, setShowModal] = useState(false);
+    const [keyword, setKeyworkd] = useState('')
+    const [filterList, setFilterList] = useState([])
     const [handleStatus, setHandleStatus] = useState(null);
     const [action, setAction] = useState('')
 
@@ -52,6 +55,7 @@ function Index() {
     const [showRenameModal, setShowRenameModal] = useState(false)
     const [current, setCurrent] = useState(null)
     const [name, setName] = useState('')
+
     const moreAction = [
         { 'label': '重命名', 'key': 'rename' },
         { 'label': '复制路径', 'key': 'copy_path' },
@@ -84,6 +88,7 @@ function Index() {
             'title': '大小',
             'dataIndex': 'size_text',
             'key': 'size_text',
+            sorter: (a, b) => a.size - b.size,
         },
         {
             'title': '时间',
@@ -91,7 +96,7 @@ function Index() {
             'key': 'month',
             'render': (col, record, index) => (
                 <>
-                    {record.month} {record.day} {record.time}
+                    {record.date} {record.time}
                 </>
             )
         },
@@ -118,6 +123,15 @@ function Index() {
     useEffect(() => {
         getServers()
     }, [])
+
+    const handleSearch = (e) => {
+        setKeyworkd(e.target.value)
+        doFilterList(files, e.target.value)
+    }
+
+    const doFilterList = (list, value) => {
+        setFilterList(list.filter(item => item.name.indexOf(value) > -1))
+    }
 
     const moreInfo = (record) => {
         modal.info({
@@ -236,7 +250,7 @@ function Index() {
     }
 
     const catFile = async (record) => {
-        if(record.size > CAT_FILE_SIZE_MAX) {
+        if (record.size > CAT_FILE_SIZE_MAX) {
             messageApi.open({
                 type: 'error',
                 content: '文件超过2M，无法查看',
@@ -318,6 +332,7 @@ function Index() {
         setQuickDirs(quickDirs)
         setLoading(true)
         let files = await sshListFiles(key, remoteDir)
+        console.log('list files', files)
         if (files.error != undefined && files.error.length > 0) {
             messageApi.open({
                 type: 'error',
@@ -340,6 +355,7 @@ function Index() {
         }
         setLoading(false)
         setFiles(files)
+        doFilterList(files, keyword)
     }
 
     var toUploadFile = async () => {
@@ -481,7 +497,7 @@ function Index() {
         </div>
         {
             connectKey.length > 0 ? <Card size='small' type="inner" style={{ marginBottom: 5 }}>
-                <div style={{ marginBottom: '10px' }}>
+                <div style={{ marginBottom: '8px' }}>
                     <Space split={"/"} align={'center'}>
                         <Link onClick={gotoDir.bind(this, { path: '' })} key={'/'}>{server != null ? server.config.directory : '/'}</Link>
                         {
@@ -492,7 +508,7 @@ function Index() {
                     </Space>
                 </div>
                 <Space>
-                    <Tag color="red">文件数：{files.length}</Tag>
+                    <Tag color="red">文件数：{filterList.length}</Tag>
                     <Button onClick={refreshFiles} size="small" icon={<SyncOutlined />}>刷新</Button>
                     <Button onClick={copyDir} size="small" icon={<CopyOutlined />}>复制路径</Button>
                     <Button size="small" icon={<UploadOutlined />} onClick={toUploadFile}>上传</Button>
@@ -510,10 +526,13 @@ function Index() {
                         <Button size="small" icon={<FolderAddOutlined />}>新建文件夹</Button>
                     </Popconfirm>
                 </Space>
+                <div style={{marginTop:'8px'}}>
+                     <Input placeholder="请输入搜索关键词" allowClear onChange={handleSearch} style={{ width: '35%' }} value={keyword} />
+                </div>
             </Card> : null
         }
-
-        <Table dataSource={files}
+       
+        <Table dataSource={filterList}
             columns={columns}
             size="small"
             bordered={true}
@@ -548,7 +567,6 @@ function Index() {
 
 function HandleProgress(props) {
     const { local_file, remote_file } = props
-
     return <Card size='small' type="inner">
         <HandleTitle {...props} action={props.action} />
         <p>本地文件：{local_file}</p>

@@ -32,3 +32,4 @@ uuid = {"version" = "1.17.0", features = ["v4"] }
 tauri-plugin-dialog = "2"
 openssl = { version = "0.10", features = ["vendored"] }
 tauri-plugin-clipboard-manager = "2"
+csv = "1.3"
