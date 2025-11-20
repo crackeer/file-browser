@@ -184,3 +184,10 @@ export const ftpDeleteDir = async (connectKey, path) => {
         path: path,
     });
 };
+
+export const generateCSV = async (jsonData, filePath) => {
+    return await invoke("generate_csv", {
+        jsonData,
+        filePath,
+    });
+};

@@ -2,6 +2,7 @@
 extern crate lazy_static;
 
 mod command;
+use command::csv::generate_csv;
 use command::ftp::{
     ftp_create_dir, ftp_delete_dir, ftp_delete_file, ftp_download_file, ftp_list_dir,
     ftp_upload_file,
@@ -11,6 +12,7 @@ use command::ssh::{
     remote_exec_command, remote_list_files, send_cancel_signal, ssh_connect_by_password,
     upload_remote_file, upload_remote_file_sync, disconnect_server,
 };
+
 use tauri_plugin_sql::{Migration, MigrationKind};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -41,6 +43,7 @@ pub fn run() {
             send_cancel_signal,
             download_remote_file_sync,
             disconnect_server,
+            generate_csv,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

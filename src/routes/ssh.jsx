@@ -2,8 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router'
 import { open } from "@tauri-apps/plugin-dialog";
 import { Button, Space, Select, Modal, Table, Typography, Card, message, Progress, Dropdown, Col, Row, Spin, Alert, Popconfirm, Input, Empty, Tag } from 'antd';
-import { SyncOutlined, UploadOutlined, FolderAddOutlined, CopyOutlined } from '@ant-design/icons';
-import { sshConnectByPassword, sshListFiles, sshDisconnect, deleteRemoteFile, uploadRemoteFileSync, getTransferProgress, cancelFileTransfer, createRemoteDir, downloadRemoteFileSync, renameRemoteFile, catRemoteFile, k3sLoadRemoteFile } from "../service/invoke"
+import { SyncOutlined, UploadOutlined, FolderAddOutlined, CopyOutlined, DownloadOutlined, ExportOutlined } from '@ant-design/icons';
+import { sshConnectByPassword, sshListFiles, sshDisconnect, deleteRemoteFile, uploadRemoteFileSync, getTransferProgress, cancelFileTransfer, createRemoteDir, downloadRemoteFileSync, renameRemoteFile, catRemoteFile, k3sLoadRemoteFile, generateCSV } from "../service/invoke"
 import lodash from 'lodash'
 import { basename, join } from '@tauri-apps/api/path'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
@@ -476,6 +476,47 @@ function Index() {
         refreshFiles()
     }
 
+    const exportCSV = async () => {
+        // Select where to save the CSV file
+        let savePath = await open({
+            multipart: false,
+            directory: true,
+        });
+        if (savePath == null || savePath.length < 1) {
+            return;
+        }
+
+        // Prepare data for CSV export
+        const exportData = filterList.map(file => ({
+            name: file.name,
+            type: file.is_dir ? 'Directory' : 'File',
+            size: file.size,
+            size_text: file.size_text,
+            date: file.date,
+            time: file.time,
+            user: file.user,
+            group: file.group,
+        }));
+
+        // Generate filename with timestamp
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+        const fileName = `file-list-${timestamp}.csv`;
+        const filePath = await join(savePath, fileName);
+
+        try {
+            await generateCSV(exportData, filePath);
+            messageApi.open({
+                type: 'success',
+                content: `文件列表已导出到: ${filePath}`,
+            });
+        } catch (error) {
+            messageApi.open({
+                type: 'error',
+                content: '导出失败: ' + error,
+            });
+        }
+    }
+
     return <div style={{ padding: 20 }}>
         {messageCtxHandler}
         {contextHolder}
@@ -525,6 +566,7 @@ function Index() {
                     >
                         <Button size="small" icon={<FolderAddOutlined />}>新建文件夹</Button>
                     </Popconfirm>
+                    <Button size="small" icon={<ExportOutlined />} onClick={exportCSV}>导出文件列表</Button>
                 </Space>
                 <div style={{marginTop:'8px'}}>
                      <Input placeholder="请输入搜索关键词" allowClear onChange={handleSearch} style={{ width: '35%' }} value={keyword} />
