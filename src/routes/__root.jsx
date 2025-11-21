@@ -39,7 +39,7 @@ function Root(props) {
             <Menu mode="horizontal" items={[
                 { key: 'setting', label: <Link to="/setting">配置</Link> },
                 { key: 'ssh', label: <Link to="/ssh">SSH</Link> },
-            ]} selectedKeys={path} onClick={clickMenu} />;
+            ]} selectedKeys={path} onClick={clickMenu} />
         </Header>
         <Content>
             <Outlet />

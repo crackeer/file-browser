@@ -3,7 +3,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { open } from "@tauri-apps/plugin-dialog";
 import { Button, Space, Select, Modal, Table, Typography, Card, message, Progress, Dropdown, Col, Row, Spin, Alert, Popconfirm, Input, Empty, Tag } from 'antd';
 import { SyncOutlined, UploadOutlined, FolderAddOutlined, CopyOutlined, DownloadOutlined, ExportOutlined } from '@ant-design/icons';
-import { sshConnectByPassword, sshListFiles, sshDisconnect, deleteRemoteFile, uploadRemoteFileSync, getTransferProgress, cancelFileTransfer, createRemoteDir, downloadRemoteFileSync, renameRemoteFile, catRemoteFile, k3sLoadRemoteFile, generateCSV } from "../service/invoke"
+import { sshConnectByPassword, sshListFiles, sshDisconnect, deleteRemoteFile, uploadRemoteFileSync, getTransferProgress, cancelFileTransfer, createRemoteDir, downloadRemoteFileSync, renameRemoteFile, catRemoteFile, k3sLoadRemoteFile, generateCSV, sshExecuteCmd } from "../service/invoke"
 import lodash from 'lodash'
 import { basename, join } from '@tauri-apps/api/path'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
@@ -60,7 +60,9 @@ function Index() {
         { 'label': '重命名', 'key': 'rename' },
         { 'label': '复制路径', 'key': 'copy_path' },
         { 'label': '查看内容', 'key': 'cat' },
-        { 'label': 'k3s镜像加载', 'key': 'k3s_image_load' },
+        { 'label': 'zip', 'key': 'compress' },
+        { 'label': 'unzip', 'key': 'unzip' },
+        { 'label': 'k3sLoadImage', 'key': 'k3s_image_load' },
         { 'label': '更多信息', 'key': 'more' }
     ]
     const getActionHandler = () => {
@@ -69,6 +71,8 @@ function Index() {
             'copy_path': copyPath,
             'more': moreInfo,
             'cat': catFile,
+            'compress': compressFile,
+            'unzip': unzipFile,
             'k3s_image_load': k3sImageLoad
         }
     }
@@ -293,6 +297,108 @@ function Index() {
             title: '加载结果',
             content: <Input.TextArea value={result} readOnly={true} rows={3}>{result}</Input.TextArea>
         })
+    }
+
+    const compressFile = async (record) => {
+        // Check if file is already a zip file
+        if (record.name.endsWith('.zip')) {
+            messageApi.open({
+                type: 'warning',
+                content: '文件已经是zip格式，无需再次压缩',
+            });
+            return
+        }
+
+        let remoteFile = getRemoteFilePath(record.name)
+        let zipFileName = record.name + '.zip'
+        let zipFilePath = getRemoteFilePath(zipFileName)
+        
+        // Check if zip file already exists
+        for (var i in files) {
+            if (files[i].name == zipFileName) {
+                messageApi.open({
+                    type: 'error',
+                    content: '压缩文件已存在: ' + zipFileName,
+                });
+                return
+            }
+        }
+
+        let hide = messageApi.loading({
+            content: '正在压缩 `' + record.name + '`...',
+            duration: 0,
+        })
+        
+        // Use zip command to compress file or directory
+        let zipCommand = `cd $(dirname '${remoteFile}') && zip -r '${zipFileName}' '${record.name}'`
+        let result = await sshExecuteCmd(connectKey, zipCommand)
+        hide()
+        
+        if (result.error != undefined && result.error.length > 0) {
+            messageApi.open({
+                type: 'error',
+                content: '压缩失败: ' + result.error,
+            });
+            return
+        }
+        
+        messageApi.open({
+            type: 'success',
+            content: `压缩成功: ${zipFileName}`,
+        });
+        refreshFiles()
+    }
+
+    const unzipFile = async (record) => {
+        // Check if file is a zip file
+        if (!record.name.endsWith('.zip')) {
+            messageApi.open({
+                type: 'warning',
+                content: '只能解压zip文件',
+            });
+            return
+        }
+
+        let remoteFile = getRemoteFilePath(record.name)
+        // Generate temp directory name (remove .zip extension and add _tmp)
+        let baseName = record.name.substring(0, record.name.length - 4)
+        let tmpDirName = baseName + '_tmp'
+        
+        // Check if tmp directory already exists
+        for (var i in files) {
+            if (files[i].name == tmpDirName) {
+                messageApi.open({
+                    type: 'error',
+                    content: '解压目录已存在: ' + tmpDirName,
+                });
+                return
+            }
+        }
+
+        let hide = messageApi.loading({
+            content: '正在解压 `' + record.name + '`...',
+            duration: 0,
+        })
+        
+        // Create tmp directory and unzip file
+        let tmpDirPath = getRemoteFilePath(tmpDirName)
+        let unzipCommand = `cd $(dirname '${remoteFile}') && mkdir -p '${tmpDirName}' && unzip -q '${record.name}' -d '${tmpDirName}'`
+        let result = await sshExecuteCmd(connectKey, unzipCommand)
+        hide()
+        
+        if (result.error != undefined && result.error.length > 0) {
+            messageApi.open({
+                type: 'error',
+                content: '解压失败: ' + result.error,
+            });
+            return
+        }
+        
+        messageApi.open({
+            type: 'success',
+            content: `解压成功到目录: ${tmpDirName}`,
+        });
+        refreshFiles()
     }
 
     const disconnectSSH = async () => {
