@@ -36,14 +36,6 @@ export const downloadRemoteFileSync = async (sessionKey, localFile, remoteFile) 
 };
 
 export const sshConnectByPassword = async (key, host, port, username, password) => {
-    let result = await invoke("exist_ssh_session", {
-        sessionKey: key
-    })
-    console.log('exist_ssh_session', result)
-    if (result.error == undefined) {
-        return key
-    }
-
     return await invoke("ssh_connect_by_password", {
         host,
         port,
@@ -137,52 +129,6 @@ export const createRemoteDir = async (sessionKey, path) => {
         cmdString: "mkdir -p " + path,
     });
     return result;
-};
-
-
-
-export const connectFTPServer = async (host, port, username, password) => {
-    return await invoke("connect_ftp", {
-        host,
-        port,
-        username,
-        password,
-    });
-};
-
-export const disconnectFTPServer = async (connectKey) => {
-    return await invoke("disconnect_ftp", {
-        key: connectKey,
-    });
-};
-
-export const listFTPFiles = async (connectKey, path) => {
-    return await invoke("ftp_list", {
-        key: connectKey,
-        path: path,
-    });
-};
-
-export const ftpUploadFile = async (connectKey, path, localFile) => {
-    return await invoke("ftp_upload_file", {
-        key: connectKey,
-        path: path,
-        localFile: localFile,
-    });
-};
-
-export const ftpDeleteFile = async (connectKey, path) => {
-    return await invoke("ftp_delete_file", {
-        key: connectKey,
-        path: path,
-    });
-};
-
-export const ftpDeleteDir = async (connectKey, path) => {
-    return await invoke("ftp_delete_dir", {
-        key: connectKey,
-        path: path,
-    });
 };
 
 export const generateCSV = async (jsonData, filePath) => {

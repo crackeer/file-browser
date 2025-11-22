@@ -1,14 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { createFileRoute } from '@tanstack/react-router'
 import { open } from "@tauri-apps/plugin-dialog";
 import { Button, Space, Select, Modal, Table, Typography, Card, message, Progress, Dropdown, Col, Row, Spin, Alert, Popconfirm, Input, Empty, Tag } from 'antd';
 import { SyncOutlined, UploadOutlined, FolderAddOutlined, CopyOutlined, DownloadOutlined, ExportOutlined } from '@ant-design/icons';
-import { sshConnectByPassword, sshListFiles, sshDisconnect, deleteRemoteFile, uploadRemoteFileSync, getTransferProgress, cancelFileTransfer, createRemoteDir, downloadRemoteFileSync, renameRemoteFile, catRemoteFile, k3sLoadRemoteFile, generateCSV, sshExecuteCmd } from "../service/invoke"
+import { sshListFiles, sshDisconnect, deleteRemoteFile, uploadRemoteFileSync, getTransferProgress, cancelFileTransfer, createRemoteDir, downloadRemoteFileSync, renameRemoteFile, catRemoteFile, k3sLoadRemoteFile, generateCSV, sshExecuteCmd } from "../service/invoke"
 import lodash from 'lodash'
 import { basename, join } from '@tauri-apps/api/path'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
-import { useSSHStore } from '../store/ssh';
 import { partial } from "filesize";
+import { getSessionByKey } from "../service/database";
 const { Link } = Typography;
 const { Search } = Input;
 
@@ -16,34 +15,14 @@ const fileSize = partial({ base: 2, standard: "jedec" });
 
 var CAT_FILE_SIZE_MAX = 1024 * 1024 * 2;
 
-export const Route = createFileRoute('/ssh')({
-    component: Index,
-})
-
-async function generateQuickDirs(directory) {
-    if (directory.length < 1) {
-        return []
-    }
-    let sep = '/';
-    let parts = directory.split(sep)
-    let list = []
-    for (var i = 0; i < parts.length; i++) {
-        if (parts[i].length > 0) {
-            list.push({
-                path: parts.slice(0, i + 1).join(sep),
-                name: parts[i]
-            })
-        }
-    }
-    return list
-}
-
-function Index() {
-    const { getServers,
-        servers, serverID, setServerID, connectKey, setConnectKey, server, quickDirs, setQuickDirs, files, setFiles, currentPath, setCurrentPath } = useSSHStore();
+export default function SSHConnection({ sessionKey }) {
     const [modal, contextHolder] = Modal.useModal();
     const [messageApi, messageCtxHandler] = message.useMessage();
     const [loading, setLoading] = useState(false);
+
+    const [files, setFiles] = useState([]);
+    const [currentPath, setCurrentPath] = useState('');
+    const [quickDirs, setQuickDirs] = useState([]);
 
     const [showModal, setShowModal] = useState(false);
     const [keyword, setKeyworkd] = useState('')
@@ -125,8 +104,29 @@ function Index() {
         }
     ]
     useEffect(() => {
-        getServers()
-    }, [])
+        getSessionByKey(sessionKey).then(result => {
+            setCurrentPath(result.path)
+            listFiles(result.path);
+        })
+    }, [sessionKey]);
+
+    async function generateQuickDirs(directory) {
+        if (directory.length < 1 || directory == '/') {
+            return []
+        }
+        let sep = '/';
+        let parts = directory.split(sep)
+        let list = []
+        for (var i = 0; i < parts.length; i++) {
+            if (parts[i].length > 0) {
+                list.push({
+                    path: parts.slice(0, i + 1).join(sep),
+                    name: parts[i]
+                })
+            }
+        }
+        return list
+    }
 
     const handleSearch = (e) => {
         setKeyworkd(e.target.value)
@@ -148,33 +148,35 @@ function Index() {
         })
     }
 
-    const gotoDir = async (item) => {
+    const goQuickDir = async (item) => {
         setCurrentPath(item.path)
-        listFiles(connectKey, server.config.directory, item.path)
-    }
-
-    var onChangeServer = (val) => {
-        setServerID(val)
+        listFiles(item.path)
     }
     const changeDir = async (name) => {
-        setCurrentPath(currentPath + '/' + name)
-        listFiles(connectKey, server.config.directory, currentPath + '/' + name)
+        let newDir = currentPath + '/' + name
+        if (currentPath == "/") {
+            newDir = '/' + name
+        }
+        setCurrentPath(newDir)
+        listFiles(newDir)
     }
     const refreshFiles = () => {
-        listFiles(connectKey, server.config.directory, currentPath)
+        listFiles(currentPath)
     }
 
     const toDeleteFile = (file) => {
+        let tempFile = getRemoteFilePath(file.name)
+        let message = `确认删除文件 ${tempFile} ?`
+        if(file.is_dir) {
+            message = `确认删除目录 ${tempFile} ?` 
+        }
         modal.confirm({
-            title: '确认删除该文件(夹)吗？',
+            title: message,
             onOk: async () => {
                 console.log('delete file', file)
                 console.log('currentPath', currentPath)
-                let remoteDir = lodash.trimEnd(server.config.directory, '/') + '/' + lodash.trimStart(currentPath, '/') + '/' + file.name
-                if (currentPath.length < 1) {
-                    remoteDir = lodash.trimEnd(server.config.directory, '/') + '/' + file.name
-                }
-                let result = await deleteRemoteFile(connectKey, remoteDir)
+                let remoteDir = currentPath + '/' + file.name
+                let result = await deleteRemoteFile(sessionKey, remoteDir)
                 if (result.error != undefined && result.error.length > 0) {
                     messageApi.open({
                         type: 'error',
@@ -187,7 +189,7 @@ function Index() {
                     type: 'success',
                     content: '删除成功',
                 });
-                listFiles(connectKey, server.config.directory, currentPath)
+                listFiles(currentPath)
             }
         })
     }
@@ -237,7 +239,7 @@ function Index() {
         }
         let oldPath = getRemoteFilePath(current.name)
         let newPath = getRemoteFilePath(name)
-        let result = await renameRemoteFile(connectKey, oldPath, newPath)
+        let result = await renameRemoteFile(sessionKey, oldPath, newPath)
         if (result.error != undefined && result.error.length > 0) {
             messageApi.open({
                 type: 'error',
@@ -262,7 +264,7 @@ function Index() {
             return
         }
         let remoteFile = getRemoteFilePath(record.name)
-        let result = await catRemoteFile(connectKey, remoteFile)
+        let result = await catRemoteFile(sessionKey, remoteFile)
         if (result.error != undefined && result.error.length > 0) {
             messageApi.open({
                 type: 'error',
@@ -283,7 +285,7 @@ function Index() {
             content: '加载中`' + record.name + '`中',
             duration: -1,
         })
-        let result = await k3sLoadRemoteFile(connectKey, remoteFile)
+        let result = await k3sLoadRemoteFile(sessionKey, remoteFile)
         hide()
         if (result.error != undefined && result.error.length > 0) {
             modal.error({
@@ -312,7 +314,7 @@ function Index() {
         let remoteFile = getRemoteFilePath(record.name)
         let zipFileName = record.name + '.zip'
         let zipFilePath = getRemoteFilePath(zipFileName)
-        
+
         // Check if zip file already exists
         for (var i in files) {
             if (files[i].name == zipFileName) {
@@ -328,12 +330,12 @@ function Index() {
             content: '正在压缩 `' + record.name + '`...',
             duration: 0,
         })
-        
+
         // Use zip command to compress file or directory
         let zipCommand = `cd $(dirname '${remoteFile}') && zip -r '${zipFileName}' '${record.name}'`
-        let result = await sshExecuteCmd(connectKey, zipCommand)
+        let result = await sshExecuteCmd(sessionKey, zipCommand)
         hide()
-        
+
         if (result.error != undefined && result.error.length > 0) {
             messageApi.open({
                 type: 'error',
@@ -341,7 +343,7 @@ function Index() {
             });
             return
         }
-        
+
         messageApi.open({
             type: 'success',
             content: `压缩成功: ${zipFileName}`,
@@ -363,7 +365,7 @@ function Index() {
         // Generate temp directory name (remove .zip extension and add _tmp)
         let baseName = record.name.substring(0, record.name.length - 4)
         let tmpDirName = baseName + '_tmp'
-        
+
         // Check if tmp directory already exists
         for (var i in files) {
             if (files[i].name == tmpDirName) {
@@ -379,13 +381,13 @@ function Index() {
             content: '正在解压 `' + record.name + '`...',
             duration: 0,
         })
-        
+
         // Create tmp directory and unzip file
         let tmpDirPath = getRemoteFilePath(tmpDirName)
         let unzipCommand = `cd $(dirname '${remoteFile}') && mkdir -p '${tmpDirName}' && unzip -q '${record.name}' -d '${tmpDirName}'`
         let result = await sshExecuteCmd(connectKey, unzipCommand)
         hide()
-        
+
         if (result.error != undefined && result.error.length > 0) {
             messageApi.open({
                 type: 'error',
@@ -393,7 +395,7 @@ function Index() {
             });
             return
         }
-        
+
         messageApi.open({
             type: 'success',
             content: `解压成功到目录: ${tmpDirName}`,
@@ -401,44 +403,19 @@ function Index() {
         refreshFiles()
     }
 
-    const disconnectSSH = async () => {
-        console.log('disconnectSSH')
-        await sshDisconnect(connectKey)
-        setConnectKey('')
-        setCurrentPath('')
-        setFiles([])
-        setQuickDirs([])
-    }
-
-    var connectSSH = async () => {
-        let connectKey = await sshConnectByPassword("ssh-" + server.id, server.config.address, server.config.port, server.config.username, server.config.password)
-        if (connectKey == undefined) {
-            modal.error({
-                content: '连接失败',
-            })
+    const listFiles = async (directory) => {
+        if (directory.length < 1) {
             return
         }
-        if (connectKey.error != undefined && connectKey.error.length > 0) {
-            messageApi.open({
-                type: 'error',
-                content: '连接失败：' + connectKey.error,
-            });
-            return
+        let quickDirs = await generateQuickDirs(directory)
+        let remoteDir = lodash.trimEnd(directory, '/')
+        if(directory == "/") {
+            remoteDir = '/'
         }
-        setConnectKey(connectKey)
-        setCurrentPath('')
-        listFiles(connectKey, server.config.directory, '')
-    }
-    const listFiles = async (key, basePath, relativePath) => {
-        if (key.length < 1) {
-            return
-        }
-        let quickDirs = await generateQuickDirs(relativePath)
-        let remoteDir = lodash.trimEnd(basePath, '/') + '/' + lodash.trimStart(relativePath, '/')
         setQuickDirs(quickDirs)
+        console.log('list files', quickDirs, directory)
         setLoading(true)
-        let files = await sshListFiles(key, remoteDir)
-        console.log('list files', files)
+        let files = await sshListFiles(sessionKey, remoteDir)
         if (files.error != undefined && files.error.length > 0) {
             messageApi.open({
                 type: 'error',
@@ -490,7 +467,7 @@ function Index() {
             total: 0,
         })
         setAction('upload')
-        let result = await uploadRemoteFileSync(connectKey, selectFile, remoteFile)
+        let result = await uploadRemoteFileSync(sessionKey, selectFile, remoteFile)
         if (result.error != undefined && result.error.length > 0) {
             messageApi.open({
                 type: 'error',
@@ -541,7 +518,7 @@ function Index() {
             total: 0,
         })
         setAction('download')
-        let result = await downloadRemoteFileSync(connectKey, locaFile, remoteFile)
+        let result = await downloadRemoteFileSync(sessionKey, locaFile, remoteFile)
         if (result.error != undefined && result.error.length > 0) {
             messageApi.open({
                 type: 'error',
@@ -566,12 +543,12 @@ function Index() {
     }
 
     const getRemoteFilePath = (fileName) => {
-        return [lodash.trimEnd(server.config.directory, '/'), lodash.trimStart(currentPath, '/'), fileName].filter(part => part.length > 0).join('/')
+        return currentPath + '/' + fileName
     }
 
     const confiremCreateDirectory = async () => {
         let remote_dir = getRemoteFilePath(directoryName)
-        let result = await createRemoteDir(connectKey, remote_dir)
+        let result = await createRemoteDir(sessionKey, remote_dir)
         if (result.error != undefined && result.error.length > 0) {
             messageApi.open({
                 type: 'error',
@@ -623,63 +600,21 @@ function Index() {
         }
     }
 
-    return <div style={{ padding: 20 }}>
+    return <div>
         {messageCtxHandler}
         {contextHolder}
-        <div>
-            选择数据源：
-            <Select style={{ width: '50%', display: 'inline-block', marginRight: 10, marginBottom: 5 }} value={serverID} onChange={onChangeServer} disabled={connectKey.length > 0}>
+        <div style={{ marginBottom: '8px' }}>
+            路径：<Space split={"/"} align={'center'}>
+                <Link onClick={goQuickDir.bind(this, { path: '/' })} key={'/'}>根</Link>
                 {
-                    servers.map(item => {
-                        return <Select.Option value={item.id}>{item.name} - {item.config.address} - {item.config.directory}</Select.Option>
+                    quickDirs.map(item => {
+                        return <Link onClick={goQuickDir.bind(this, item)} key={item.path}>{item.name}</Link>
                     })
                 }
-            </Select>
-            {
-                serverID > 0 && connectKey.length < 1 ? <Button type="primary" onClick={connectSSH}>连接</Button> : null
-            }
-            {
-                connectKey.length > 0 && <Button type="primary" onClick={disconnectSSH}>断开</Button>
-            }
+                
+            </Space>
+            <Input placeholder="搜索..." allowClear onChange={handleSearch} style={{ width: '150px', marginLeft: '10px' }} value={keyword} />
         </div>
-        {
-            connectKey.length > 0 ? <Card size='small' type="inner" style={{ marginBottom: 5 }}>
-                <div style={{ marginBottom: '8px' }}>
-                    <Space split={"/"} align={'center'}>
-                        <Link onClick={gotoDir.bind(this, { path: '' })} key={'/'}>{server != null ? server.config.directory : '/'}</Link>
-                        {
-                            quickDirs.map(item => {
-                                return <Link onClick={gotoDir.bind(this, item)} key={item.path}>{item.name}</Link>
-                            })
-                        }
-                    </Space>
-                </div>
-                <Space>
-                    <Tag color="red">文件数：{filterList.length}</Tag>
-                    <Button onClick={refreshFiles} size="small" icon={<SyncOutlined />}>刷新</Button>
-                    <Button onClick={copyDir} size="small" icon={<CopyOutlined />}>复制路径</Button>
-                    <Button size="small" icon={<UploadOutlined />} onClick={toUploadFile}>上传</Button>
-                    <Popconfirm
-                        title="新建文件夹"
-                        description={
-                            <Input value={directoryName} onChange={(e) => setDirectoryName(e.target.value)} />
-                        }
-                        onConfirm={confiremCreateDirectory}
-                        okText="确认"
-                        cancelText="取消"
-                        placement='bottom'
-                        onOpenChange={() => console.log('open change')}
-                    >
-                        <Button size="small" icon={<FolderAddOutlined />}>新建文件夹</Button>
-                    </Popconfirm>
-                    <Button size="small" icon={<ExportOutlined />} onClick={exportCSV}>导出文件列表</Button>
-                </Space>
-                <div style={{marginTop:'8px'}}>
-                     <Input placeholder="请输入搜索关键词" allowClear onChange={handleSearch} style={{ width: '35%' }} value={keyword} />
-                </div>
-            </Card> : null
-        }
-       
         <Table dataSource={filterList}
             columns={columns}
             size="small"
@@ -687,7 +622,38 @@ function Index() {
             locale={{
                 emptyText: <Empty description="目录为空" />
             }}
-            pagination={false} rowKey={'name'} scroll={{ y: 1000 }} footer={null} loading={loading} />
+            pagination={false} 
+            rowKey={'name'} 
+            scroll={{ y: '400px' }} 
+            footer={null} 
+            loading={loading}
+            summary={() => {
+                return <Table.Summary.Row>
+                    <Table.Summary.Cell index={0} colSpan={4}>总共文件数量: {filterList.length}</Table.Summary.Cell>
+                </Table.Summary.Row>
+            }} />
+         <Card size='small' type="inner" style={{ marginTop: 15 }} title="快捷操作">
+            <Space>
+                <Button onClick={refreshFiles} size="small" icon={<SyncOutlined />}>刷新</Button>
+                <Button onClick={copyDir} size="small" icon={<CopyOutlined />}>复制路径</Button>
+                <Button size="small" icon={<UploadOutlined />} onClick={toUploadFile}>上传</Button>
+                <Popconfirm
+                    title="新建文件夹"
+                    description={
+                        <Input value={directoryName} onChange={(e) => setDirectoryName(e.target.value)} />
+                    }
+                    onConfirm={confiremCreateDirectory}
+                    okText="确认"
+                    cancelText="取消"
+                    placement='bottom'
+                    onOpenChange={() => console.log('open change')}
+                >
+                    <Button size="small" icon={<FolderAddOutlined />}>新建文件夹</Button>
+                </Popconfirm>
+                <Button size="small" icon={<ExportOutlined />} onClick={exportCSV}>导出文件列表</Button>
+            </Space>
+        </Card>
+
         <Modal
             title={action == 'upload' ? '上传文件' : '下载文件'}
             open={showModal}

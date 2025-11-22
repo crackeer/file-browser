@@ -3,14 +3,11 @@ extern crate lazy_static;
 
 mod command;
 use command::csv::generate_csv;
-use command::ftp::{
-    ftp_create_dir, ftp_delete_dir, ftp_delete_file, ftp_download_file, ftp_list_dir,
-    ftp_upload_file,
-};
+
 use command::ssh::{
-    download_remote_file_sync, exist_ssh_session, get_transfer_remote_progress,
+    disconnect_server, download_remote_file_sync, exist_ssh_session, get_transfer_remote_progress,
     remote_exec_command, remote_list_files, send_cancel_signal, ssh_connect_by_password,
-    upload_remote_file, upload_remote_file_sync, disconnect_server,
+    upload_remote_file, upload_remote_file_sync,
 };
 
 use tauri_plugin_sql::{Migration, MigrationKind};
@@ -32,12 +29,6 @@ pub fn run() {
             exist_ssh_session,
             upload_remote_file,
             remote_list_files,
-            ftp_download_file,
-            ftp_delete_dir,
-            ftp_create_dir,
-            ftp_list_dir,
-            ftp_upload_file,
-            ftp_delete_file,
             get_transfer_remote_progress,
             upload_remote_file_sync,
             send_cancel_signal,
@@ -53,14 +44,28 @@ fn sqlite_migration() -> Vec<Migration> {
     vec![
         // Define your migrations here
         Migration {
-            version: 2,
-            description: "create_initial_tables",
-            sql: "CREATE TABLE  IF NOT EXISTS  storage_config (
+            version: 1,
+            description: "create ssh server",
+            sql: "CREATE TABLE IF NOT EXISTS server (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
-                type TEXT NOT NULL,
-                config TEXT NOT NULL,
-                create_at INTEGER DEFAULT '0'
+                server TEXT NOT NULL,
+                port TEXT NOT NULL,
+                username TEXT NOT NULL,
+                password TEXT NOT NULL,
+                create_time INTEGER DEFAULT '0'
+            );",
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 2,
+            description: "create session",
+            sql: "CREATE TABLE  IF NOT EXISTS session (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_key TEXT NOT NULL,
+                server_id TEXT NOT NULL,
+                path TEXT NOT NULL,
+                create_time INTEGER DEFAULT '0'
             );",
             kind: MigrationKind::Up,
         },

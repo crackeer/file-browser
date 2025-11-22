@@ -4,42 +4,68 @@ export const getSQLiteDB = async () => {
     return await Database.load("sqlite:storage.db");
 };
 
-export const createStorage = async (name, type, config) => {
+export const createServer = async (name, server, port, username, password) => {
     let db = await getSQLiteDB();
     let nowTime = dayjs().unix();
-    let configStr = JSON.stringify(config);
     return await db.execute(
-        "INSERT into storage_config (name, type, config, create_at) VALUES ($1, $2, $3, $4)",
-        [name, type, configStr, nowTime]
+        "INSERT into server (name, server, port, username, password, create_time) VALUES ($1, $2, $3, $4, $5, $6 )",
+        [name, server, port, username, password, nowTime]
     );
 };
 
-export const getStorageList = async (storagetType) => {
+export const getServerList = async () => {
     let db = await getSQLiteDB();
     let list = await db.select(
-        "SELECT * from storage_config WHERE type = $1 order by create_at desc",
-        [storagetType]
+        "SELECT * from server order by create_time desc",
     );
     for (var i in list) {
-        list[i].config = JSON.parse(list[i].config);
-        list[i].create_time = dayjs.unix(list[i].create_at).format('YYYY-MM-DD HH:mm')
+        list[i].create_time = dayjs.unix(list[i].create_time).format('YYYY-MM-DD HH:mm')
     }
     return list;
 };
 
-export const updateStorage = async (id, config) => {
+export const deleteServer = async (id) => {
     let db = await getSQLiteDB();
-    let configStr = JSON.stringify(config);
     return await db.execute(
-        "update storage_config set config = $1 where id = $3",
-        [configStr, id]
+        "delete from server where id = $1",
+        [id]
     );
 }
 
-export const deleteStorage = async (id) => {
+export const createSession = async (sessionKey, serverId, path) => {
+    let db = await getSQLiteDB();
+    let nowTime = dayjs().unix();
+    return await db.execute(
+        "INSERT into session (session_key, server_id, path, create_time) VALUES ($1, $2, $3, $4)",
+        [sessionKey, serverId, path, nowTime]
+    );  
+}
+
+export const getSessionList = async () => {
+    let db = await getSQLiteDB();
+    let list = await db.select(
+        "SELECT * from session order by id desc",
+    );
+    for (var i in list) {
+        list[i].create_time = dayjs.unix(list[i].create_time).format('YYYY-MM-DD HH:mm')
+    }
+    return list;
+};
+
+export const deleteSession = async (sessionKey) => {
     let db = await getSQLiteDB();
     return await db.execute(
-        "delete from storage_config where id = $1",
-        [id]
+        "delete from session where session_key = $1",
+        [sessionKey]
+    )
+}
+    
+export const getSessionByKey = async (sessionKey) => {
+    let db = await getSQLiteDB();
+    let list = await db.select(
+        "SELECT * from session where session_key = $1",
+        [sessionKey]
     );
+    if (list.length == 0) return null;
+    return list[0];
 }

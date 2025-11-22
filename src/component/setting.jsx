@@ -1,24 +1,15 @@
 import React, { use, useEffect, useState } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
-import { Table, Button, Modal, Form, Space, Radio, Input } from 'antd';
-import { getStorageList, createStorage, deleteStorage } from "../service/database";
+import { Table, Button, Modal, Form, Space, Radio, Input, message } from 'antd';
+import { getServerList, createServer, deleteServer } from "../service/database";
 
-export const Route = createFileRoute('/setting')({
-    component: Setting,
-})
 
-const options = [
-    { label: 'SSH', value: 'ssh' },
-    { label: 'FTP', value: 'ftp' },
-    { label: 'S3', value: 's3' },
-];
-
-function Setting() {
+export default function Setting({ onConnect }) {
     const [form] = Form.useForm();
-    const [activeKey, setActiveKey] = useState("ssh");
     const [list, setList] = useState([]);
     const [open, setOpen] = useState(false)
     const [modal, contextHolder] = Modal.useModal();
+    const [messageApi, msgContextHolder] = message.useMessage();
+    
     let columns = [
         {
             title: '名称',
@@ -26,24 +17,25 @@ function Setting() {
             key: 'name',
         },
         {
-            title: 'IP地址',
-            dataIndex: ['config', 'address'],
-            key: 'address',
+            title: 'IP',
+            dataIndex: 'server',
+            key: 'server'
         },
         {
             title: '端口',
-            dataIndex: ['config', 'port'],
+            dataIndex: 'port',
             key: 'port',
         },
         {
             title: '用户名',
-            dataIndex: ['config', 'username'],
+            dataIndex: 'username',
             key: 'username',
         },
         {
-            title: '根目录',
-            dataIndex: ['config', 'directory'],
-            key: 'directory',
+            title: '密码',
+            dataIndex: 'password',
+            key: 'password',
+            render: (text) => <div>*****</div>,
         },
         {
             title: '操作',
@@ -51,6 +43,7 @@ function Setting() {
             key: 'action',
             render: (text, record) => {
                 return <Space>
+                    <Button type="link" size='small' onClick={() => onConnect?.(record)}>连接</Button>
                     <Button type="link" size='small' onClick={() => toCopy(record)}>复制</Button>
                     <Button type="link" size='small' onClick={() => toDelete(record)}>删除</Button>
                 </Space>
@@ -58,8 +51,7 @@ function Setting() {
         },
     ];
     useEffect(() => {
-        getStorageList(activeKey).then(res => {
-            console.log('res', res);
+        getServerList().then(res => {
             setList(res)
         })
     }, []);
@@ -74,20 +66,17 @@ function Setting() {
             console.log('Success:', value);
             setOpen(false);
             try {
-                let res = await createStorage(value.name, activeKey, {
-                    address: value.address,
-                    port: value.port,
-                    username: value.username,
-                    password: value.password,
-                    directory: value.directory
-                });
-                let newList = await getStorageList(activeKey);
+                let res = await createServer(value.name, value.server, value.port, value.username, value.password);
+                console.log('res', res);
+                let newList = await getServerList();
                 setList(newList);
             } catch (error) {
                 console.log('error', error);
-                modal.error({
+                messageApi.open({
+                    type: 'error',
                     content: '创建失败:' + error.message,
-                })
+                });
+                return false
             }
 
         }).catch(info => {
@@ -100,9 +89,8 @@ function Setting() {
         modal.confirm({
             title: '确认删除该配置吗？',
             onOk: async () => {
-                // await deleteStorage(record.id);
-                await deleteStorage(record.id);
-                let newList = await getStorageList(activeKey);
+                await deleteServer(record.id);
+                let newList = await getServerList();
                 setList(newList);
             },
         });
@@ -111,32 +99,22 @@ function Setting() {
     var toCopy = (record) => {
         form.setFieldsValue({
             name: record.name + '_copy',
-            address: record.config.address,
-            port: record.config.port,
-            username: record.config.username,
-            password: record.config.password,
-            directory: record.config.directory
+            server: record.server,
+            port: record.port,
+            username: record.username,
+            password: record.password,
         })
         setOpen(true)
     }
 
     return <>
-        <div style={{ margin: '0 auto', textAlign: 'center' }}>
-            <Radio.Group
-                options={options}
-                defaultValue="Apple"
-                value={activeKey}
-                optionType="button"
-                buttonStyle="solid"
-                style={{ padding: '10px 5px' }}
-                onChange={e => setActiveKey(e.target.value)}
-            />
-            <Button type="default" style={{ marginLeft: 10 }} onClick={handleAdd}>新增</Button>
-        </div>
-        <Table dataSource={list} columns={columns} pagination={false} bordered size='small' style={{ padding: '0 30px' }} />
+        <Space style={{marginBottom: 10}}>
+            <Button type="default" size="small" onClick={handleAdd}>新增</Button>
+        </Space>
+        <Table dataSource={list} columns={columns} pagination={false} bordered size='small' />
 
         <Modal
-            title={<>新增{activeKey}配置</>}
+            title={<>新增配置</>}
             closable={true}
             open={open}
             onOk={handleConfirmCreare}
@@ -150,7 +128,7 @@ function Setting() {
                 <Form.Item label="名称" name="name" rules={[{ required: true, message: '请输入名称' }]}>
                     <Input />
                 </Form.Item>
-                <Form.Item label="IP" name="address" rules={[{ required: true, message: '请输入地址' }]}>
+                <Form.Item label="IP" name="server" rules={[{ required: true, message: '请输入地址' }]}>
                     <Input />
                 </Form.Item>
                 <Form.Item label="端口" name="port" rules={[{ required: true, message: '请输入端口' }]}>
@@ -162,15 +140,9 @@ function Setting() {
                 <Form.Item label="密码" name="password" rules={[{ required: true, message: '请输入密码' }]}>
                     <Input type="password" />
                 </Form.Item>
-                <Form.Item label="根目录" name="directory" rules={[{ required: true, message: '请输入根目录' }]}>
-                    <Input />
-                </Form.Item>
             </Form>
         </Modal>
         {contextHolder}
+        {msgContextHolder}
     </>
-}
-
-function SSH() {
-    return <div>SSH 设置</div>
 }
