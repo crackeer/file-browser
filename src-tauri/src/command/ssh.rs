@@ -10,7 +10,8 @@ use std::io::{BufRead, BufReader};
 use std::net::TcpStream;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
-
+use std::time::Duration;
+use std::net::SocketAddr;
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TransferInfo {
     local_file: String,
@@ -404,7 +405,9 @@ fn connect_ssh_session(
     auth_type: &str,
     auth_config: &str,
 ) -> Result<Session, String> {
-    let connection = TcpStream::connect(format!("{}:{}", host, port));
+    
+    let addr: SocketAddr = format!("{}:{}", host, port).parse::<SocketAddr>().map_err(|e| e.to_string())?;
+    let connection = TcpStream::connect_timeout(&addr, Duration::from_secs(20));
     if let Err(err) = connection {
         return Err(err.to_string());
     }
