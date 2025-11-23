@@ -69,5 +69,17 @@ fn sqlite_migration() -> Vec<Migration> {
             );",
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 3,
+            description: "create command",
+            sql: "CREATE TABLE IF NOT EXISTS command (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                category TEXT NOT NULL,
+                command TEXT NOT NULL,
+                create_time INTEGER DEFAULT '0'
+            );",
+            kind: MigrationKind::Up,
+        },
     ]
 }

@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { open } from "@tauri-apps/plugin-dialog";
-import { Button, Space, Select, Modal, Table, Typography, Card, message, Progress, Dropdown, Col, Row, Spin, Alert, Popconfirm, Input, Empty, Tag } from 'antd';
+import { Button, Space, Tabs, Modal, Table, Typography, Card, message, Progress, Dropdown, Form, AutoComplete, Spin, Alert, Popconfirm, Input, Empty, Tag } from 'antd';
 import { SyncOutlined, UploadOutlined, FolderAddOutlined, CopyOutlined, DownloadOutlined, ExportOutlined } from '@ant-design/icons';
-import { sshListFiles, sshDisconnect, deleteRemoteFile, uploadRemoteFileSync, getTransferProgress, cancelFileTransfer, createRemoteDir, downloadRemoteFileSync, renameRemoteFile, catRemoteFile, k3sLoadRemoteFile, generateCSV, sshExecuteCmd } from "../service/invoke"
+import { sshListFiles, deleteRemoteFile, uploadRemoteFileSync, getTransferProgress, cancelFileTransfer, createRemoteDir, downloadRemoteFileSync, renameRemoteFile, catRemoteFile, k3sLoadRemoteFile, generateCSV, sshExecuteCmd } from "../service/invoke"
 import lodash from 'lodash'
 import { basename, join } from '@tauri-apps/api/path'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { partial } from "filesize";
-import { getSessionByKey } from "../service/database";
+import { getSessionByKey, updateSessionPath, getCommandList } from "../service/database";
 const { Link } = Typography;
 const { Search } = Input;
 
@@ -19,6 +19,10 @@ export default function SSHConnection({ sessionKey }) {
     const [modal, contextHolder] = Modal.useModal();
     const [messageApi, messageCtxHandler] = message.useMessage();
     const [loading, setLoading] = useState(false);
+
+    const [categories, setCategories] = useState([]);
+    const [activeTab, setActiveTab] = useState('all');
+    const [commandList, setCommandList] = useState([]);
 
     const [files, setFiles] = useState([]);
     const [currentPath, setCurrentPath] = useState('');
@@ -34,6 +38,13 @@ export default function SSHConnection({ sessionKey }) {
     const [showRenameModal, setShowRenameModal] = useState(false)
     const [current, setCurrent] = useState(null)
     const [name, setName] = useState('')
+
+    const [showRunCommandModal, setShowRunCommandModal] = useState(false)
+    const [command, setCommand] = useState({
+        name: '',
+        command: ''
+    })
+
 
     const moreAction = [
         { 'label': '重命名', 'key': 'rename' },
@@ -108,7 +119,17 @@ export default function SSHConnection({ sessionKey }) {
             setCurrentPath(result.path)
             listFiles(result.path);
         })
+        loadCommandList();
     }, [sessionKey]);
+
+    const loadCommandList = async () => {
+        let res = await getCommandList();
+        setCommandList(res);
+
+        // Extract unique categories for AutoComplete
+        const uniqueCategories = [...new Set(res.map(item => item.category))];
+        setCategories(uniqueCategories);
+    }
 
     async function generateQuickDirs(directory) {
         if (directory.length < 1 || directory == '/') {
@@ -151,6 +172,7 @@ export default function SSHConnection({ sessionKey }) {
     const goQuickDir = async (item) => {
         setCurrentPath(item.path)
         listFiles(item.path)
+        updateSessionPath(sessionKey, item.path)
     }
     const changeDir = async (name) => {
         let newDir = currentPath + '/' + name
@@ -159,6 +181,7 @@ export default function SSHConnection({ sessionKey }) {
         }
         setCurrentPath(newDir)
         listFiles(newDir)
+        updateSessionPath(sessionKey, newDir)
     }
     const refreshFiles = () => {
         listFiles(currentPath)
@@ -167,8 +190,8 @@ export default function SSHConnection({ sessionKey }) {
     const toDeleteFile = (file) => {
         let tempFile = getRemoteFilePath(file.name)
         let message = `确认删除文件 ${tempFile} ?`
-        if(file.is_dir) {
-            message = `确认删除目录 ${tempFile} ?` 
+        if (file.is_dir) {
+            message = `确认删除目录 ${tempFile} ?`
         }
         modal.confirm({
             title: message,
@@ -409,7 +432,7 @@ export default function SSHConnection({ sessionKey }) {
         }
         let quickDirs = await generateQuickDirs(directory)
         let remoteDir = lodash.trimEnd(directory, '/')
-        if(directory == "/") {
+        if (directory == "/") {
             remoteDir = '/'
         }
         setQuickDirs(quickDirs)
@@ -556,6 +579,7 @@ export default function SSHConnection({ sessionKey }) {
             });
             return
         }
+        setDirectoryName('')
         refreshFiles()
     }
 
@@ -599,6 +623,26 @@ export default function SSHConnection({ sessionKey }) {
             });
         }
     }
+    const toCreateOperation = () => {
+        form.resetFields();
+        setOpen(true);
+    }
+
+    const toRunCommand = (command) => {
+        setCommand(command)
+        setShowRunCommandModal(true)
+    }
+
+    const doRunCommand = () => {
+        console.log('do run command', command)
+        sshExecuteCmd(sessionKey, command.command).then(result => {
+            if (result.error != undefined && result.error.length > 0) {
+                setCommand(prevState => ({ ...prevState, error: result.error }))
+            } else {
+                setCommand(prevState => ({ ...prevState, output: result }))
+            }
+        })
+    }
 
     return <div>
         {messageCtxHandler}
@@ -611,7 +655,7 @@ export default function SSHConnection({ sessionKey }) {
                         return <Link onClick={goQuickDir.bind(this, item)} key={item.path}>{item.name}</Link>
                     })
                 }
-                
+
             </Space>
             <Input placeholder="搜索..." allowClear onChange={handleSearch} style={{ width: '150px', marginLeft: '10px' }} value={keyword} />
         </div>
@@ -622,17 +666,17 @@ export default function SSHConnection({ sessionKey }) {
             locale={{
                 emptyText: <Empty description="目录为空" />
             }}
-            pagination={false} 
-            rowKey={'name'} 
-            scroll={{ y: '400px' }} 
-            footer={null} 
+            pagination={false}
+            rowKey={'name'}
+            scroll={{ y: '400px' }}
+            footer={null}
             loading={loading}
             summary={() => {
                 return <Table.Summary.Row>
-                    <Table.Summary.Cell index={0} colSpan={4}>总共文件数量: {filterList.length}</Table.Summary.Cell>
+                    <Table.Summary.Cell index={0} colSpan={4}><strong>文件数量:</strong> {filterList.length}</Table.Summary.Cell>
                 </Table.Summary.Row>
             }} />
-         <Card size='small' type="inner" style={{ marginTop: 15 }} title="快捷操作">
+        <Card size='small' type="inner" style={{ marginTop: 15 }} title="系统操作">
             <Space>
                 <Button onClick={refreshFiles} size="small" icon={<SyncOutlined />}>刷新</Button>
                 <Button onClick={copyDir} size="small" icon={<CopyOutlined />}>复制路径</Button>
@@ -652,6 +696,29 @@ export default function SSHConnection({ sessionKey }) {
                 </Popconfirm>
                 <Button size="small" icon={<ExportOutlined />} onClick={exportCSV}>导出文件列表</Button>
             </Space>
+        </Card>
+        <Card size='small' type="inner" style={{ marginTop: 15 }} title={<>自定义操作</>}>
+            <Tabs
+                activeKey={activeTab}
+                onChange={setActiveTab}
+                tabPosition="left"
+                items={[
+                    {
+                        key: 'all',
+                        label: '全部',
+                        children: <Space>
+                            {commandList.map(command => <Button size="small" key={command.id} onClick={toRunCommand.bind(this, command)}>{command.name}</Button>)}
+                        </Space>
+                    },
+                    ...categories.map(category => ({
+                        key: category,
+                        label: category,
+                        children: <Space>
+                            {commandList.filter(item => item.category === category).map(command => <Button key={command.id} size="small" onClick={toRunCommand.bind(this, command)}>{command.name}</Button>)}
+                        </Space>
+                    }))
+                ]}
+            />
         </Card>
 
         <Modal
@@ -675,6 +742,28 @@ export default function SSHConnection({ sessionKey }) {
             onOk={doRename}
         >
             <Input value={name} onChange={(e) => setName(e.target.value)} />
+        </Modal>
+
+        <Modal
+            title={`执行【${command.name}】确认`}
+            open={showRunCommandModal}
+            onOk={doRunCommand}
+            onCancel={() => { setShowRunCommandModal(false) }}
+            footer={null}
+        >
+            <p>命令：</p>
+            <Input.TextArea value={command.command} readOnly={true} rows={4} />
+            <p style={{ textAlign: 'right' }}>
+                <Button type="primary" onClick={doRunCommand}>确认执行</Button>
+            </p>
+            <p>输出结果：</p>
+            {command.error && <Alert
+                title="Error"
+                description={command.error}
+                type="error"
+                showIcon
+            />}
+            {command.output && <Input.TextArea value={command.output} readOnly={true} rows={4} placeholder='输出结果' />}
         </Modal>
     </div>
 }
