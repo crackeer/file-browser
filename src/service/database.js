@@ -43,12 +43,12 @@ export const deleteServer = async (id) => {
     );
 }
 
-export const createSession = async (sessionKey, serverId, path) => {
+export const createSession = async (sessionKey, serverId, path, type = 'ssh') => {
     let db = await getSQLiteDB();
     let nowTime = dayjs().unix();
     return await db.execute(
-        "INSERT into session (session_key, server_id, path, create_time) VALUES ($1, $2, $3, $4)",
-        [sessionKey, serverId, path, nowTime]
+        "INSERT into session (session_key, server_id, path, type, create_time) VALUES ($1, $2, $3, $4, $5)",
+        [sessionKey, serverId, path, type, nowTime]
     );  
 }
 

@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Card, message } from 'antd';
+import { Card, message, Tabs } from 'antd';
 import { CloseOutlined } from '@ant-design/icons';
 import Setting from './component/setting';
 import Command from './component/command';
 import SSHConnection from './component/ssh';
+import K3sManagement from './component/k3s';
+import SystemManagement from './component/system';
 import { sshConnectByPassword, sshDisconnect, isSessionConnected } from './service/invoke';
-import { createSession, deleteSession, getSessionList, getServerByID, getServerBySessionKey } from './service/database';
+import { createSession, deleteSession, getSessionList, getServerByID, getServerBySessionKey, getSessionByKey } from './service/database';
 
 
 function randomSessionKey() {
@@ -25,11 +27,13 @@ export default function App() {
     const [tabs, setTabs] = useState([
         {
             key: 'setting',
+            sessionKey: 'setting',
             label: '服务器列表',
             closable: false,
         },
         {
             key: 'command',
+            sessionKey: 'command',
             label: '命令行列表',
             closable: false,
         }
@@ -48,7 +52,8 @@ export default function App() {
                 await deleteSession(result[i].id);
             }
             newTabs.push({
-                key: result[i].session_key,
+                key: `tab-${i}-${result[i].session_key}`, // 使用唯一的tab key
+                sessionKey: result[i].session_key, // sessionKey作为私有属性
                 label: server.name + result[i].id,
                 closable: true,
             })
@@ -57,7 +62,7 @@ export default function App() {
     }
 
 
-    const handleConnect = async function (server) {
+    const handleConnect = async function (server, type = 'ssh') {
         console.log('Connecting to server:', server, randomSessionKey());
         messageApi.open({
             type: 'loading',
@@ -75,21 +80,38 @@ export default function App() {
         }
         console.log('Connected with session key:', connectKey);
 
-        let sessionResult = await createSession(connectKey, server.id + '', getDefaultUserPath(server.username));
+        let sessionResult = await createSession(connectKey, server.id + '', getDefaultUserPath(server.username), type); // 添加type字段
         const newTab = {
-            key: connectKey,
-            label: server.name + sessionResult.lastInsertId,
+            key: `tab-${Date.now()}-${connectKey}`, // 使用唯一的tab key
+            sessionKey: connectKey, // sessionKey作为私有属性
+            label: server.name + (type === 'k3s' ? '(K3s)' : '') + (type === 'system' ? '(System)' : '') + sessionResult.lastInsertId,
             closable: true,
         };
         setTabs([...tabs, newTab]);
+        setCurrentSessionType(type); // 设置当前session类型
         setSessionKey(connectKey);
     }
 
-    const handleTabChange = async (key) => {
+    // 处理K3s连接
+    const handleConnectK3s = async function (server) {
+        await handleConnect(server, 'k3s');
+    }
+
+    // 存储当前session的类型
+    const [currentSessionType, setCurrentSessionType] = useState('ssh');
+
+    const handleTabChange = async (tabKey) => {
+        // 找到对应的tab对象
+        const tab = tabs.find(t => t.key === tabKey);
+        if (!tab) return;
+        
+        const key = tab.sessionKey;
+        
         if (key == 'setting' || key == 'command') {
             setSessionKey(key);
             return;
         }
+        
         let result = await isSessionConnected(key);
         console.log('Session connected:', result);
         if (!result) {
@@ -109,23 +131,32 @@ export default function App() {
                 return;
             }
         }
-        console.log('Tab changed to:', key);
+        // 获取session类型
+        let session = await getSessionByKey(key);
+        setCurrentSessionType(session?.type || 'ssh');
+        console.log('Tab changed to:', tabKey, 'SessionKey:', key, 'Type:', session?.type);
         setSessionKey(key);
     }
 
     const handleTabRemove = async (targetKey) => {
-        let disconnectResult = await sshDisconnect(targetKey);
+        // 找到对应的tab对象
+        const tabToRemove = tabs.find(tab => tab.key === targetKey);
+        if (!tabToRemove) return;
+        
+        const sessionKeyToRemove = tabToRemove.sessionKey;
+        
+        let disconnectResult = await sshDisconnect(sessionKeyToRemove);
         console.log('Disconnected with result:', disconnectResult);
-        let deleteResult = await deleteSession(targetKey);
+        let deleteResult = await deleteSession(sessionKeyToRemove);
         console.log('Deleted with result:', deleteResult);
         const newTabs = tabs.filter(tab => tab.key !== targetKey);
         console.log('New tabs:', newTabs);
         setTabs(newTabs);
 
         // If the active tab is being removed, switch to the last tab
-        if (sessionKey === targetKey) {
+        if (sessionKey === sessionKeyToRemove) {
             const lastTab = newTabs[newTabs.length - 1];
-            setSessionKey(lastTab?.key || 'setting');
+            setSessionKey(lastTab?.sessionKey || 'setting');
         }
     }
 
@@ -155,9 +186,17 @@ export default function App() {
                 onTabChange={handleTabChange}
                 footer={null}
             >
-                {sessionKey === 'setting' ? <Setting onConnect={handleConnect} /> : 
-                 sessionKey === 'command' ? <Command /> : 
-                 <SSHConnection sessionKey={sessionKey} />}
+                {sessionKey === 'setting' ? (
+                    <Setting onConnect={handleConnect} />
+                ) : sessionKey === 'command' ? (
+                    <Command />
+                ) : currentSessionType === 'k3s' ? (
+                    <K3sManagement sessionKey={sessionKey} />
+                ) : currentSessionType === 'system' ? (
+                    <SystemManagement sessionKey={sessionKey} />
+                ) : (
+                    <SSHConnection sessionKey={sessionKey} />
+                )}
             </Card>
             {contextHolder}
         </div>

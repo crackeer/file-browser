@@ -81,5 +81,11 @@ fn sqlite_migration() -> Vec<Migration> {
             );",
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 4,
+            description: "add type to session",
+            sql: "ALTER TABLE session ADD COLUMN type TEXT DEFAULT 'ssh';",
+            kind: MigrationKind::Up,
+        },
     ]
 }

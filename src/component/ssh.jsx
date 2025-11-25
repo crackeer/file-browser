@@ -87,12 +87,17 @@ export default function SSHConnection({ sessionKey }) {
         {
             'title': '时间',
             'dataIndex': 'time',
-            'key': 'month',
+            'key': 'time',
             'render': (col, record, index) => (
                 <>
                     {record.date} {record.time}
                 </>
-            )
+            ),
+            sorter: (a, b) => {
+                // 假设record包含一个可以用于排序的时间戳字段，或者我们可以将date和time转换为Date对象进行比较
+                return new Date(b.date + ' ' + b.time) - new Date(a.date + ' ' + a.time);
+            },
+            defaultSortOrder: 'descend'
         },
         {
             'title': '操作',
@@ -448,13 +453,15 @@ export default function SSHConnection({ sessionKey }) {
             return
         }
         files.sort((a, b) => {
+            // 先按目录/文件类型排序，目录在前
             if (a.is_dir && !b.is_dir) {
                 return -1
             }
             if (!a.is_dir && b.is_dir) {
                 return 1
             }
-            return 0
+            // 再按时间排序，最新的在前
+            return new Date(b.date + ' ' + b.time) - new Date(a.date + ' ' + a.time)
         })
         for (var i in files) {
             files[i]['size_text'] = fileSize(files[i]['size'])
@@ -647,57 +654,28 @@ export default function SSHConnection({ sessionKey }) {
     return <div>
         {messageCtxHandler}
         {contextHolder}
-        <div style={{ marginBottom: '8px' }}>
-            路径：<Space split={"/"} align={'center'}>
-                <Link onClick={goQuickDir.bind(this, { path: '/' })} key={'/'}>根</Link>
-                {
-                    quickDirs.map(item => {
-                        return <Link onClick={goQuickDir.bind(this, item)} key={item.path}>{item.name}</Link>
-                    })
-                }
-
-            </Space>
-            <Input placeholder="搜索..." allowClear onChange={handleSearch} style={{ width: '150px', marginLeft: '10px' }} value={keyword} />
-        </div>
-        <Table dataSource={filterList}
-            columns={columns}
-            size="small"
-            bordered={true}
-            locale={{
-                emptyText: <Empty description="目录为空" />
-            }}
-            pagination={false}
-            rowKey={'name'}
-            scroll={{ y: '400px' }}
-            footer={null}
-            loading={loading}
-            summary={() => {
-                return <Table.Summary.Row>
-                    <Table.Summary.Cell index={0} colSpan={4}><strong>文件数量:</strong> {filterList.length}</Table.Summary.Cell>
-                </Table.Summary.Row>
-            }} />
-        <Card size='small' type="inner" style={{ marginTop: 15 }} title="系统操作">
-            <Space>
-                <Button onClick={refreshFiles} size="small" icon={<SyncOutlined />}>刷新</Button>
-                <Button onClick={copyDir} size="small" icon={<CopyOutlined />}>复制路径</Button>
-                <Button size="small" icon={<UploadOutlined />} onClick={toUploadFile}>上传</Button>
-                <Popconfirm
-                    title="新建文件夹"
-                    description={
-                        <Input value={directoryName} onChange={(e) => setDirectoryName(e.target.value)} />
-                    }
-                    onConfirm={confiremCreateDirectory}
-                    okText="确认"
-                    cancelText="取消"
-                    placement='bottom'
-                    onOpenChange={() => console.log('open change')}
-                >
-                    <Button size="small" icon={<FolderAddOutlined />}>新建文件夹</Button>
-                </Popconfirm>
-                <Button size="small" icon={<ExportOutlined />} onClick={exportCSV}>导出文件列表</Button>
-            </Space>
-        </Card>
-        <Card size='small' type="inner" style={{ marginTop: 15 }} title={<>自定义操作</>}>
+        <Card size='small' type="inner" style={{ marginBottom: 15 }} title="快捷命令">
+            <div style={{ marginBottom: 15 }}>
+                <Space>
+                    <Button onClick={refreshFiles} size="small" icon={<SyncOutlined />}>刷新</Button>
+                    <Button onClick={copyDir} size="small" icon={<CopyOutlined />}>复制路径</Button>
+                    <Button size="small" icon={<UploadOutlined />} onClick={toUploadFile}>上传</Button>
+                    <Popconfirm
+                        title="新建文件夹"
+                        description={
+                            <Input value={directoryName} onChange={(e) => setDirectoryName(e.target.value)} />
+                        }
+                        onConfirm={confiremCreateDirectory}
+                        okText="确认"
+                        cancelText="取消"
+                        placement='bottom'
+                        onOpenChange={() => console.log('open change')}
+                    >
+                        <Button size="small" icon={<FolderAddOutlined />}>新建文件夹</Button>
+                    </Popconfirm>
+                    <Button size="small" icon={<ExportOutlined />} onClick={exportCSV}>导出文件列表</Button>
+                </Space>
+            </div>
             <Tabs
                 activeKey={activeTab}
                 onChange={setActiveTab}
@@ -720,6 +698,39 @@ export default function SSHConnection({ sessionKey }) {
                 ]}
             />
         </Card>
+        <Table dataSource={filterList}
+            columns={columns}
+            size="small"
+            bordered={true}
+            locale={{
+                emptyText: <Empty description="目录为空" />
+            }}
+            pagination={false}
+            rowKey={'name'}
+            loading={loading}
+            summary={() => {
+                return <Table.Summary.Row>
+                    <Table.Summary.Cell index={0} colSpan={4}><strong>文件数量:</strong> {filterList.length}</Table.Summary.Cell>
+                </Table.Summary.Row>
+            }}
+            title={() => (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                        路径：<Space split={"/"} align={'center'}>
+                            <Link onClick={goQuickDir.bind(this, { path: '/' })} key={'/'}>根</Link>
+                            {
+                                quickDirs.map(item => {
+                                    return <Link onClick={goQuickDir.bind(this, item)} key={item.path}>{item.name}</Link>
+                                })
+                            }
+                        </Space>
+                    </div>
+                    <Input placeholder="搜索..." allowClear onChange={handleSearch} style={{ width: '150px' }} value={keyword} />
+                </div>
+            )}
+            defaultSortOrder="descend"
+            defaultFilteredValue={['time']}
+            defaultSortKey="time" />
 
         <Modal
             title={action == 'upload' ? '上传文件' : '下载文件'}
