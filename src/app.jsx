@@ -24,15 +24,18 @@ function getDefaultUserPath(username) {
 export default function App() {
     const [messageApi, contextHolder] = message.useMessage();
     const [tabKey, setTabKey] = useState('setting');
-    const [currentSessionType, setCurrentSessionType] = useState('setting');
     const [tabs, setTabs] = useState([
         {
             key: 'setting',
+            type : 'setting',
+            sessionKey: 'setting',
             label: '服务器列表',
             closable: false,
         },
         {
             key: 'command',
+            type : 'command',
+            sessionKey: 'command',
             label: '命令行列表',
             closable: false,
         }
@@ -53,6 +56,7 @@ export default function App() {
             newTabs.push({
                 key: result[i].session_key, // 使用唯一的tab key
                 type : result[i].type,
+                session_key : result[i].session_key,
                 label: getTabName(result[i].type, server.name, result[i].id),
                 closable: true,
             })
@@ -93,37 +97,39 @@ export default function App() {
         const newTab = {
             key: connectKey,
             type : type,
+            session_key : connectKey,
             label: getTabName(type, server.name, sessionResult.id),
             closable: true,
         };
         setTabs([...tabs, newTab]);
-        setCurrentSessionType(type); // 设置当前session类型
         setTabKey(connectKey);
     }
    
 
     const handleTabChange = async (tabKey) => {
-        // 找到对应的tab对象
+       
+        
+        if (tabKey == 'setting' || tabKey == 'command') {
+            setTabKey(tabKey);
+            return;
+        }
+
+         // 找到对应的tab对象
         const tab = tabs.find(t => t.key === tabKey);
         if (!tab) return;
         
-        const key = tab.sessionKey;
         
-        if (key == 'setting' || key == 'command') {
-            setTabKey(key);
-            return;
-        }
-        
-        let result = await isSessionConnected(key);
+        const sessionKey = tab.session_key;
+        let result = await isSessionConnected(sessionKey);
         console.log('Session connected:', result);
         if (!result) {
-            let server = await getServerBySessionKey(key);
+            let server = await getServerBySessionKey(sessionKey);
             messageApi.open({
                 type: 'loading',
                 content: '重新连接中...',
                 duration: 0,
             });
-            let connectResult = await sshConnectByPassword(key, server.server, server.port, server.username, server.password);
+            let connectResult = await sshConnectByPassword(sessionKey, server.server, server.port, server.username, server.password);
             messageApi.destroy();
             if (connectResult.error != undefined && connectResult.error.length > 0) {
                 messageApi.open({
@@ -133,8 +139,7 @@ export default function App() {
                 return;
             }
         }
-        setCurrentSessionType(tab.type);
-        setTabKey(key);
+        setTabKey(tabKey);
     }
 
     const handleTabRemove = async (targetKey) => {
@@ -159,23 +164,43 @@ export default function App() {
         }
     }
 
-    const tabItems = tabs.map((tab,index) => ({
-        key: tab.key,
-        label: (
-            <span>
-                {tab.label}
-                {tab.closable && (
-                    <CloseOutlined
-                        style={{ marginLeft: 8 }}
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            handleTabRemove(tab.key);
-                        }}
-                    />
-                )}
-            </span>
-        )
-    }));
+    const tabItems = tabs.map((tab,index) => {
+        let tabData = {
+            key: tab.key,
+            label: (
+                <span>
+                    {tab.label}
+                    {tab.closable && (
+                        <CloseOutlined
+                            style={{ marginLeft: 8 }}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleTabRemove(tab.key);
+                            }}
+                        />
+                    )}
+                </span>
+            )
+        }
+        switch (tab.type) {
+            case 'setting':
+                tabData.children = <Setting onConnect={handleConnect} />
+                break;
+            case 'command':
+                tabData.children = <Command />
+                break;
+            case 'k3s':
+                tabData.children = <K3sManagement sessionKey={tab.session_key} />
+                break;
+            case 'system':
+                tabData.children = <SystemManagement sessionKey={tab.session_key} />
+                break;
+            default:
+                tabData.children = <SSHConnection sessionKey={tab.session_key} />
+                break;
+        }
+        return tabData;
+    });
 
     return (
         <div style={{ padding: 20 }}>
@@ -185,17 +210,6 @@ export default function App() {
                 onTabChange={handleTabChange}
                 footer={null}
             >
-                {currentSessionType === 'setting' ? (
-                    <Setting onConnect={handleConnect} />
-                ) : currentSessionType === 'command' ? (
-                    <Command />
-                ) : currentSessionType === 'k3s' ? (
-                    <K3sManagement sessionKey={tabKey} />
-                ) : currentSessionType === 'system' ? (
-                    <SystemManagement sessionKey={tabKey} />
-                ) : (
-                    <SSHConnection sessionKey={tabKey} />
-                )}
             </Card>
             {contextHolder}
         </div>
