@@ -23,17 +23,16 @@ function getDefaultUserPath(username) {
 
 export default function App() {
     const [messageApi, contextHolder] = message.useMessage();
-    const [sessionKey, setSessionKey] = useState('setting');
+    const [tabKey, setTabKey] = useState('setting');
+    const [currentSessionType, setCurrentSessionType] = useState('setting');
     const [tabs, setTabs] = useState([
         {
             key: 'setting',
-            sessionKey: 'setting',
             label: '服务器列表',
             closable: false,
         },
         {
             key: 'command',
-            sessionKey: 'command',
             label: '命令行列表',
             closable: false,
         }
@@ -52,15 +51,25 @@ export default function App() {
                 await deleteSession(result[i].id);
             }
             newTabs.push({
-                key: `tab-${i}-${result[i].session_key}`, // 使用唯一的tab key
-                sessionKey: result[i].session_key, // sessionKey作为私有属性
-                label: server.name + result[i].id,
+                key: result[i].session_key, // 使用唯一的tab key
+                type : result[i].type,
+                label: getTabName(result[i].type, server.name, result[i].id),
                 closable: true,
             })
         }
         setTabs([...tabs, ...newTabs])
     }
 
+    
+    const getTabName = (type, name, id) => {
+        if (type === 'k3s') {
+            return '(K3s)' + name
+        } else if (type === 'system') {
+            return  '(System)' + name
+        } else {
+            return '(File)' + name + '-'
+        }
+    }
 
     const handleConnect = async function (server, type = 'ssh') {
         console.log('Connecting to server:', server, randomSessionKey());
@@ -82,23 +91,16 @@ export default function App() {
 
         let sessionResult = await createSession(connectKey, server.id + '', getDefaultUserPath(server.username), type); // 添加type字段
         const newTab = {
-            key: `tab-${Date.now()}-${connectKey}`, // 使用唯一的tab key
-            sessionKey: connectKey, // sessionKey作为私有属性
-            label: server.name + (type === 'k3s' ? '(K3s)' : '') + (type === 'system' ? '(System)' : '') + sessionResult.lastInsertId,
+            key: connectKey,
+            type : type,
+            label: getTabName(type, server.name, sessionResult.id),
             closable: true,
         };
         setTabs([...tabs, newTab]);
         setCurrentSessionType(type); // 设置当前session类型
-        setSessionKey(connectKey);
+        setTabKey(connectKey);
     }
-
-    // 处理K3s连接
-    const handleConnectK3s = async function (server) {
-        await handleConnect(server, 'k3s');
-    }
-
-    // 存储当前session的类型
-    const [currentSessionType, setCurrentSessionType] = useState('ssh');
+   
 
     const handleTabChange = async (tabKey) => {
         // 找到对应的tab对象
@@ -108,7 +110,7 @@ export default function App() {
         const key = tab.sessionKey;
         
         if (key == 'setting' || key == 'command') {
-            setSessionKey(key);
+            setTabKey(key);
             return;
         }
         
@@ -131,11 +133,8 @@ export default function App() {
                 return;
             }
         }
-        // 获取session类型
-        let session = await getSessionByKey(key);
-        setCurrentSessionType(session?.type || 'ssh');
-        console.log('Tab changed to:', tabKey, 'SessionKey:', key, 'Type:', session?.type);
-        setSessionKey(key);
+        setCurrentSessionType(tab.type);
+        setTabKey(key);
     }
 
     const handleTabRemove = async (targetKey) => {
@@ -156,7 +155,7 @@ export default function App() {
         // If the active tab is being removed, switch to the last tab
         if (sessionKey === sessionKeyToRemove) {
             const lastTab = newTabs[newTabs.length - 1];
-            setSessionKey(lastTab?.sessionKey || 'setting');
+            setTabKey(lastTab?.sessionKey || 'setting');
         }
     }
 
@@ -182,20 +181,20 @@ export default function App() {
         <div style={{ padding: 20 }}>
             <Card
                 tabList={tabItems}
-                activeTabKey={sessionKey}
+                activeTabKey={tabKey}
                 onTabChange={handleTabChange}
                 footer={null}
             >
-                {sessionKey === 'setting' ? (
+                {currentSessionType === 'setting' ? (
                     <Setting onConnect={handleConnect} />
-                ) : sessionKey === 'command' ? (
+                ) : currentSessionType === 'command' ? (
                     <Command />
                 ) : currentSessionType === 'k3s' ? (
-                    <K3sManagement sessionKey={sessionKey} />
+                    <K3sManagement sessionKey={tabKey} />
                 ) : currentSessionType === 'system' ? (
-                    <SystemManagement sessionKey={sessionKey} />
+                    <SystemManagement sessionKey={tabKey} />
                 ) : (
-                    <SSHConnection sessionKey={sessionKey} />
+                    <SSHConnection sessionKey={tabKey} />
                 )}
             </Card>
             {contextHolder}
