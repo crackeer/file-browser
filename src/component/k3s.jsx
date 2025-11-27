@@ -18,12 +18,14 @@ export default function K3sManagement({ sessionKey }) {
     const [apiResources, setApiResources] = useState([]);
     const [selectedResource, setSelectedResource] = useState('pods');
     const [resourceData, setResourceData] = useState([]);
+    const [filteredData, setFilteredData] = useState([]);
     const [resourceColumns, setResourceColumns] = useState([]);
     const [resourceDetails, setResourceDetails] = useState(null);
     const [showDetailsModal, setShowDetailsModal] = useState(false);
     const [showRawYamlModal, setShowRawYamlModal] = useState(false);
     const [rawYaml, setRawYaml] = useState('');
     const [loadingYaml, setLoadingYaml] = useState(false);
+    const [searchText, setSearchText] = useState('');
     
     // 初始化加载
     useEffect(() => {
@@ -43,6 +45,18 @@ export default function K3sManagement({ sessionKey }) {
             loadResourceData();
         }
     }, [currentNamespace, selectedResource]);
+    
+    // 搜索过滤逻辑
+    useEffect(() => {
+        if (!searchText) {
+            setFilteredData(resourceData);
+        } else {
+            const filtered = resourceData.filter(item => 
+                item.name.toLowerCase().includes(searchText.toLowerCase())
+            );
+            setFilteredData(filtered);
+        }
+    }, [searchText, resourceData]);
     
     // 加载所有namespace
     const loadNamespaces = async () => {
@@ -71,28 +85,17 @@ export default function K3sManagement({ sessionKey }) {
         }
     };
     
-    // 加载所有可用的API资源
+    // 加载固定的API资源列表
     const loadApiResources = async () => {
         try {
-            let result = await sshExecuteCmd(sessionKey, 'k3s kubectl api-resources --verbs=list -o name');
-            if (result.error) {
-                messageApi.error('获取API资源列表失败: ' + result.error);
-                return;
-            }
+            // 默认只展示固定的资源类型
+            const fixedResources = ['pods', 'services', 'deployments', 'statefulsets', 'ingressroutes', "configmaps"];
             
-            // 处理结果，去除空行并按字母排序
-            const resources = result.split('\n')
-                .map(r => r.trim())
-                .filter(r => r.length > 0)
-                .sort();
+            setApiResources(fixedResources);
             
-            setApiResources(resources);
-            
-            // 如果pods资源存在，则默认选择它
-            if (resources.includes('pods')) {
+            // 只有在selectedResource为空时才设置默认值，避免切换namespace时重置
+            if (!selectedResource) {
                 setSelectedResource('pods');
-            } else if (resources.length > 0) {
-                setSelectedResource(resources[0]);
             }
         } catch (error) {
             messageApi.error('处理API资源数据失败: ' + error.message);
@@ -119,6 +122,7 @@ export default function K3sManagement({ sessionKey }) {
                 // 处理资源数据，提取公共字段
                 const items = processResourceItems(data.items);
                 setResourceData(items);
+                setFilteredData(items);
                 
                 // 动态生成表格列
                 const columns = generateResourceColumns(items);
@@ -126,11 +130,13 @@ export default function K3sManagement({ sessionKey }) {
             } else {
                 messageApi.warning(`没有找到${selectedResource}的数据`);
                 setResourceData([]);
+                setFilteredData([]);
                 setResourceColumns([]);
             }
         } catch (error) {
             messageApi.error('处理资源数据失败: ' + error.message);
             setResourceData([]);
+            setFilteredData([]);
             setResourceColumns([]);
         } finally {
             setLoading(false);
@@ -187,6 +193,14 @@ export default function K3sManagement({ sessionKey }) {
                         ...baseInfo,
                         data: Object.keys(item.data || {}).length
                     };
+                case 'ingressroutes':
+                    return {
+                        ...baseInfo,
+                        namespace: item.metadata.namespace,
+                        host: item.spec.routes ? item.spec.routes[0]?.match?.host || '-' : '-',
+                        service: item.spec.routes ? item.spec.routes[0]?.services[0]?.name || '-' : '-',
+                        port: item.spec.routes ? item.spec.routes[0]?.services[0]?.port || '-' : '-'
+                    };
                 default:
                     // 对于其他资源类型，尝试提取一些通用信息
                     return {
@@ -201,9 +215,9 @@ export default function K3sManagement({ sessionKey }) {
     const generateResourceColumns = (items) => {
         if (!items || items.length === 0) return [];
         
-        // 获取第一个项目的所有键
+        // 获取第一个项目的所有键，过滤掉namespace和_raw
         const firstItem = items[0];
-        const keys = Object.keys(firstItem).filter(key => key !== '_raw');
+        const keys = Object.keys(firstItem).filter(key => key !== '_raw' && key !== 'namespace');
         
         // 基础列配置
         const columns = keys.map(key => {
@@ -234,16 +248,53 @@ export default function K3sManagement({ sessionKey }) {
         columns.push({
             title: '操作',
             key: 'actions',
-            render: (_, record) => (
-                <Space>
-                    <Button size="small" onClick={() => showResourceDetails(record)}>
+            render: (_, record) => {
+                const actions = [
+                    <Button size="small" onClick={() => showResourceDetails(record)} key="details">
                         详情
-                    </Button>
-                    <Button size="small" onClick={() => showResourceYaml(record.name)}>
+                    </Button>,
+                    <Button size="small" onClick={() => showResourceYaml(record.name)} key="yaml">
                         YAML
                     </Button>
-                </Space>
-            )
+                ];
+                
+                // 为pod、deploy、svc添加删除功能
+                if (['pods', 'deployments', 'services'].includes(selectedResource)) {
+                    actions.push(
+                        <Button 
+                            size="small" 
+                            danger 
+                            onClick={() => deleteResource(record.name)} 
+                            key="delete"
+                        >
+                            删除
+                        </Button>
+                    );
+                }
+                
+                // 为deploy添加rollout功能
+                if (selectedResource === 'deployments') {
+                    actions.push(
+                        <Dropdown
+                            menu={{
+                                items: [
+                                    { key: 'restart', label: '重启', onClick: () => rolloutRestart(record.name) },
+                                    { key: 'history', label: '历史', onClick: () => rolloutHistory(record.name) },
+                                    { key: 'status', label: '状态', onClick: () => rolloutStatus(record.name) }
+                                ]
+                            }}
+                            trigger={['click']}
+                            key="rollout"
+                        >
+                            <Button size="small">
+                                滚动更新 <span style={{ marginLeft: '4px' }}>▼</span>
+                            </Button>
+                        </Dropdown>
+                    );
+                }
+                
+                return <Space>{actions}</Space>;
+            }
         });
         
         return columns;
@@ -273,6 +324,103 @@ export default function K3sManagement({ sessionKey }) {
             messageApi.error('处理YAML数据失败: ' + error.message);
         } finally {
             setLoadingYaml(false);
+        }
+    };
+    
+    // 删除资源
+    const deleteResource = async (resourceName) => {
+        Modal.confirm({
+            title: `确定要删除${selectedResource} ${resourceName}吗？`,
+            content: '此操作不可恢复，请谨慎操作。',
+            okText: '确定',
+            okType: 'danger',
+            cancelText: '取消',
+            onOk: async () => {
+                try {
+                    setLoading(true);
+                    let result = await sshExecuteCmd(sessionKey, 
+                        `k3s kubectl delete ${selectedResource} ${resourceName} -n ${currentNamespace}`);
+                    
+                    if (result.error) {
+                        messageApi.error(`删除${selectedResource}失败: ` + result.error);
+                    } else {
+                        messageApi.success(`删除${selectedResource}成功`);
+                        // 重新加载资源数据
+                        await loadResourceData();
+                    }
+                } catch (error) {
+                    messageApi.error('处理删除操作失败: ' + error.message);
+                } finally {
+                    setLoading(false);
+                }
+            }
+        });
+    };
+    
+    // 滚动更新-重启
+    const rolloutRestart = async (resourceName) => {
+        try {
+            setLoading(true);
+            let result = await sshExecuteCmd(sessionKey, 
+                `k3s kubectl rollout restart deployment ${resourceName} -n ${currentNamespace}`);
+            
+            if (result.error) {
+                messageApi.error('重启部署失败: ' + result.error);
+            } else {
+                messageApi.success('重启部署成功');
+                // 重新加载资源数据
+                await loadResourceData();
+            }
+        } catch (error) {
+            messageApi.error('处理重启操作失败: ' + error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+    
+    // 滚动更新-历史
+    const rolloutHistory = async (resourceName) => {
+        try {
+            setLoading(true);
+            let result = await sshExecuteCmd(sessionKey, 
+                `k3s kubectl rollout history deployment ${resourceName} -n ${currentNamespace}`);
+            
+            if (result.error) {
+                messageApi.error('获取部署历史失败: ' + result.error);
+            } else {
+                Modal.info({
+                    title: `${resourceName} 部署历史`,
+                    content: <pre style={{ whiteSpace: 'pre-wrap' }}>{result}</pre>,
+                    width: '80%'
+                });
+            }
+        } catch (error) {
+            messageApi.error('处理部署历史操作失败: ' + error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+    
+    // 滚动更新-状态
+    const rolloutStatus = async (resourceName) => {
+        try {
+            setLoading(true);
+            let result = await sshExecuteCmd(sessionKey, 
+                `k3s kubectl rollout status deployment ${resourceName} -n ${currentNamespace}`);
+            
+            if (result.error) {
+                messageApi.error('获取部署状态失败: ' + result.error);
+            } else {
+                Modal.info({
+                    title: `${resourceName} 部署状态`,
+                    content: <pre style={{ whiteSpace: 'pre-wrap' }}>{result}</pre>,
+                    width: '80%'
+                });
+            }
+        } catch (error) {
+            messageApi.error('处理部署状态操作失败: ' + error.message);
+        } finally {
+            setLoading(false);
         }
     };
     
@@ -338,7 +486,6 @@ export default function K3sManagement({ sessionKey }) {
             {messageCtxHandler}
             {contextHolder}
             
-            {/* 顶部控制栏 */}
             <Card size="small" type="inner" style={{ marginBottom: 15 }}>
                 <Space>
                     <span>Namespace:</span>
@@ -350,17 +497,6 @@ export default function K3sManagement({ sessionKey }) {
                     >
                         {namespaces.map(ns => (
                             <Option key={ns} value={ns}>{ns}</Option>
-                        ))}
-                    </Select>
-                    
-                    <span style={{ marginLeft: 20 }}>资源类型:</span>
-                    <Select
-                        value={selectedResource}
-                        onChange={setSelectedResource}
-                        style={{ width: 200 }}
-                    >
-                        {apiResources.map(resource => (
-                            <Option key={resource} value={resource}>{resource}</Option>
                         ))}
                     </Select>
                     
@@ -381,24 +517,54 @@ export default function K3sManagement({ sessionKey }) {
                 </Space>
             </Card>
             
-            {/* 资源列表表格 */}
-            <Table
-                dataSource={resourceData}
-                columns={resourceColumns}
-                size="small"
-                bordered={true}
-                locale={{
-                    emptyText: <Empty description="没有找到资源数据" />
-                }}
-                pagination={{
-                    pageSize: 10,
-                    showSizeChanger: true,
-                    showTotal: (total) => `共 ${total} 条`
-                }}
-                rowKey={'name'}
-                scroll={{ y: '400px' }}
-                loading={loading}
-            />
+            {/* 垂直Tabs布局 */}
+            <div style={{ display: 'flex', gap: '16px' }}>
+                {/* 左侧垂直Tabs */}
+                <div style={{ width: '120px' }}>
+                    <Tabs
+                        activeKey={selectedResource}
+                        onChange={setSelectedResource}
+                        type="card"
+                        tabPosition="left"
+                        style={{ height: '400px' }}
+                    >
+                        {apiResources.map(resource => (
+                            <Tabs.TabPane 
+                                tab={resource} 
+                                key={resource}
+                            />
+                        ))}
+                    </Tabs>
+                </div>
+                
+                {/* 右侧资源列表表格 */}
+                <div style={{ flex: 1 }}>
+                    {/* 搜索框 */}
+                    <div style={{ marginBottom: '16px' }}>
+                        <Input
+                            placeholder="按名称搜索"
+                            value={searchText}
+                            onChange={(e) => setSearchText(e.target.value)}
+                            allowClear
+                            style={{ width: '200px' }}
+                        />
+                    </div>
+                    
+                    <Table
+                        dataSource={filteredData}
+                        columns={resourceColumns}
+                        size="small"
+                        bordered={true}
+                        locale={{
+                            emptyText: <Empty description="没有找到资源数据" />
+                        }}
+                        pagination={false}
+                        rowKey={'name'}
+                        scroll={{ y: '400px' }}
+                        loading={loading}
+                    />
+                </div>
+            </div>
             
             {/* 资源详情模态框 */}
             <Modal
