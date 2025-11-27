@@ -107,8 +107,6 @@ export default function App() {
    
 
     const handleTabChange = async (tabKey) => {
-       
-        
         if (tabKey == 'setting' || tabKey == 'command') {
             setTabKey(tabKey);
             return;
@@ -147,7 +145,7 @@ export default function App() {
         const tabToRemove = tabs.find(tab => tab.key === targetKey);
         if (!tabToRemove) return;
         
-        const sessionKeyToRemove = tabToRemove.sessionKey;
+        const sessionKeyToRemove = tabToRemove.session_key;
         
         let disconnectResult = await sshDisconnect(sessionKeyToRemove);
         console.log('Disconnected with result:', disconnectResult);
@@ -158,9 +156,8 @@ export default function App() {
         setTabs(newTabs);
 
         // If the active tab is being removed, switch to the last tab
-        if (sessionKey === sessionKeyToRemove) {
-            const lastTab = newTabs[newTabs.length - 1];
-            setTabKey(lastTab?.sessionKey || 'setting');
+        if (tabKey === sessionKeyToRemove) {
+            setTabKey('setting');
         }
     }
 

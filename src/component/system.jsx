@@ -7,14 +7,14 @@ const { Link } = Typography;
 const { Option } = Select;
 
 const SYSTEM_INFO_COMMANDS = {
-  disk: 'df -h',
+  disk: 'df -h | grep dev',
   mounts: 'mount | grep -v tmpfs | grep -v proc | grep -v sysfs | grep -v devtmpfs',
   memory: 'free -h',
   services: 'systemctl list-units --type=service --state=running',
   ports: 'ss -tuln',
   cpu: 'lscpu | grep -E "Model name|Architecture|CPU\(s\):"',
   os: 'cat /etc/os-release | grep -E "NAME|VERSION"',
-  uptime: 'uptime'
+  uptime: 'uptime -s'
 };
 
 export default function SystemManagement({ sessionKey }) {
