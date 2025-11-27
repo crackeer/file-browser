@@ -1,20 +1,10 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import { tanstackRouter } from '@tanstack/router-plugin/vite'
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [
-     tanstackRouter({
-      target: 'react',
-      autoCodeSplitting: true,
-      routeFileExtensions: ['.tsx', '.ts', '.jsx', '.js'],
-      // 关键配置
-      routesDirectory: './src/routes',  // 路由文件目录
-      generatedRouteTree: './src/routeTree.gen.js', // 输出位置
-      disableTypes: true
-    }),
     react()
   ],
 

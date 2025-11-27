@@ -201,13 +201,12 @@ export default function App() {
 
     return (
         <div style={{ padding: 20 }}>
-            <Card
-                tabList={tabItems}
-                activeTabKey={tabKey}
-                onTabChange={handleTabChange}
-                footer={null}
+            <Tabs
+                items={tabItems}
+                activeKey={tabKey}
+                onChange={handleTabChange}
             >
-            </Card>
+            </Tabs>
             {contextHolder}
         </div>
     );
