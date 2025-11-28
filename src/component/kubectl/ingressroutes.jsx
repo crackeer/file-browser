@@ -12,11 +12,10 @@ export default function IngressRoutes({ sessionKey, namespace, refreshCount }) {
     // IngressRoutes specific states
     const [ingressrouteData, setIngressrouteData] = useState([]);
     const [ingressrouteColumns, setIngressrouteColumns] = useState([]);
-    const [resourceDetails, setResourceDetails] = useState(null);
-    const [showDetailsModal, setShowDetailsModal] = useState(false);
     const [showRawYamlModal, setShowRawYamlModal] = useState(false);
     const [rawYaml, setRawYaml] = useState('');
     const [loadingYaml, setLoadingYaml] = useState(false);
+    const [currentResourceName, setCurrentResourceName] = useState('');
     
     // 当sessionKey、namespace或refreshCount改变时，重新加载ingressroutes数据
     useEffect(() => {
@@ -108,7 +107,7 @@ export default function IngressRoutes({ sessionKey, namespace, refreshCount }) {
                 dataIndex: 'name',
                 key: 'name',
                 render: (text, record) => (
-                    <a href="javascript:void(0)" onClick={() => showResourceDetails(record)}>
+                    <a href="javascript:void(0)" onClick={() => showResourceYaml(record.name)}>
                         {text}
                     </a>
                 )
@@ -150,12 +149,6 @@ export default function IngressRoutes({ sessionKey, namespace, refreshCount }) {
                 key: 'actions',
                 render: (_, record) => {
                     const actions = [
-                        <Button size="small" onClick={() => showResourceDetails(record)} key="details">
-                            详情
-                        </Button>,
-                        <Button size="small" onClick={() => showResourceYaml(record.name)} key="yaml">
-                            YAML
-                        </Button>,
                         <Button 
                             size="small" 
                             danger 
@@ -172,14 +165,11 @@ export default function IngressRoutes({ sessionKey, namespace, refreshCount }) {
         ];
     };
     
-    // 显示资源详情
-    const showResourceDetails = (record) => {
-        setResourceDetails(record._raw);
-        setShowDetailsModal(true);
-    };
+
     
     // 显示资源的YAML
     const showResourceYaml = async (resourceName) => {
+        setCurrentResourceName(resourceName);
         setLoadingYaml(true);
         try {
             let result = await sshExecuteCmd(sessionKey, 
@@ -274,22 +264,11 @@ export default function IngressRoutes({ sessionKey, namespace, refreshCount }) {
                 loading={loading}
             />
             
-            {/* 资源详情模态框 */}
-            <Modal
-                title={`IngressRoute 详情: ${resourceDetails?.name}`}
-                open={showDetailsModal}
-                onCancel={() => setShowDetailsModal(false)}
-                footer={null}
-                width={'80%'}
-            >
-                <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                    {JSON.stringify(resourceDetails, null, 2)}
-                </pre>
-            </Modal>
+
             
             {/* 资源YAML模态框 */}
             <Modal
-                title={`IngressRoute YAML: ${resourceDetails?.name}`}
+                title={`IngressRoute YAML: ${currentResourceName}`}
                 open={showRawYamlModal}
                 onCancel={() => setShowRawYamlModal(false)}
                 footer={null}

@@ -50,7 +50,8 @@ export default function K3sManagement({ sessionKey }) {
                 return;
             }
 
-            const namespaces = JSON.parse(result).items.map(ns => ns.metadata.name);
+            // 获取namespaces列表并按字典顺序排序
+            const namespaces = JSON.parse(result).items.map(ns => ns.metadata.name).sort();
             setNamespaces(namespaces);
 
             // 如果默认namespace存在，则设置为当前namespace
@@ -119,42 +120,51 @@ export default function K3sManagement({ sessionKey }) {
         }
     };
     
-    // 执行自定义命令
-    const executeCustomCommand = () => {
-        modal.confirm({
-            title: '执行自定义kubectl命令',
-            content: (
-                <TextArea
-                    rows={4}
-                    placeholder="输入kubectl命令，例如: get pods -A"
-                    id="custom-command"
-                />
-            ),
-            onOk: async () => {
-                const command = document.getElementById('custom-command').value;
-                if (!command) {
-                    messageApi.warning('请输入命令');
-                    return;
-                }
-
-                setLoading(true);
-                try {
-                    const fullCommand = command.startsWith('k3s ') ? command : `k3s kubectl ${command}`;
-                    let result = await sshExecuteCmd(sessionKey, fullCommand);
-
-                    Modal.info({
-                        title: '命令执行结果',
-                        content: <pre style={{ whiteSpace: 'pre-wrap' }}>{result.error || result}</pre>,
-                        width: '80%'
-                    });
-                } catch (error) {
-                    messageApi.error('执行命令失败: ' + error.message);
-                } finally {
-                    setLoading(false);
-                }
-            }
-        });
+    // 应用YAML
+    const [showApplyYamlModal, setShowApplyYamlModal] = useState(false);
+    const [yamlContent, setYamlContent] = useState('');
+    
+    const applyYaml = () => {
+        setYamlContent('');
+        setShowApplyYamlModal(true);
     };
+    
+    const handleApplyYaml = async () => {
+        if (!yamlContent.trim()) {
+            messageApi.warning('请输入YAML内容');
+            return;
+        }
+
+        setLoading(true);
+        try {
+            // 使用echo命令将YAML内容通过管道传递给kubectl apply
+            const command = `echo '${yamlContent}' | k3s kubectl apply -f - -n ${currentNamespace}`;
+            let result = await sshExecuteCmd(sessionKey, command);
+
+            if (result.error) {
+                Modal.error({
+                    title: 'Apply YAML 失败',
+                    content: <pre style={{ whiteSpace: 'pre-wrap' }}>{result.error}</pre>,
+                    width: '80%'
+                });
+            } else {
+                Modal.info({
+                    title: 'Apply YAML 成功',
+                    content: <pre style={{ whiteSpace: 'pre-wrap' }}>{result}</pre>,
+                    width: '80%'
+                });
+                // 刷新资源列表
+                setRefreshCount(prev => prev + 1);
+                setShowApplyYamlModal(false);
+            }
+        } catch (error) {
+            messageApi.error('执行Apply YAML失败: ' + error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+    
+
 
     return (
         <div>
@@ -180,10 +190,12 @@ export default function K3sManagement({ sessionKey }) {
                 >
                     刷新
                 </Button>
+
                 <Button
-                    onClick={executeCustomCommand}
+                    onClick={applyYaml}
+                    type="primary"
                 >
-                    执行命令
+                    Apply YAML
                 </Button>
             </Space>
 
@@ -213,6 +225,25 @@ export default function K3sManagement({ sessionKey }) {
             </div>
 
             {/* 模态框由各资源组件内部处理 */}
+            
+            {/* Apply YAML模态框 */}
+            <Modal
+                title="Apply YAML"
+                open={showApplyYamlModal}
+                onOk={handleApplyYaml}
+                onCancel={() => setShowApplyYamlModal(false)}
+                okText="Apply"
+                cancelText="取消"
+                width={800}
+            >
+                <TextArea
+                    rows={12}
+                    placeholder="输入YAML内容..."
+                    value={yamlContent}
+                    onChange={(e) => setYamlContent(e.target.value)}
+                    style={{ fontFamily: 'monospace' }}
+                />
+            </Modal>
         </div>
     );
 }

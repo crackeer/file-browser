@@ -44,8 +44,8 @@ export default function Setting({ onConnect }) {
             render: (text, record) => {
                 return <Space>
                     <Button type="link" size='small' onClick={() => onConnect?.(record)}>连接</Button>
-                    <Button type="link" size='small' onClick={() => onConnect?.(record, 'k3s')}>查看K3s</Button>
-                    <Button type="link" size='small' onClick={() => onConnect?.(record, 'system')}>查看系统信息</Button>
+                    <Button type="link" size='small' onClick={() => onConnect?.(record, 'k3s')}>k3s管理</Button>
+                    <Button type="link" size='small' onClick={() => onConnect?.(record, 'system')}>系统信息</Button>
                     <Button type="link" size='small' onClick={() => toCopy(record)}>复制</Button>
                     <Button type="link" size='small' onClick={() => toDelete(record)}>删除</Button>
                 </Space>
