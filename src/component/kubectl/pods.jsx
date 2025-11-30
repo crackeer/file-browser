@@ -4,7 +4,7 @@ import { SyncOutlined } from '@ant-design/icons';
 import { sshExecuteCmd } from "../../service/invoke"
 const { Link } = Typography;
 
-export default function Pods({ sessionKey, namespace, refreshCount }) {
+export default function Pods({ sessionKey, namespace, refreshCount, searchText }) {
     const [modal, contextHolder] = Modal.useModal();
     const [messageApi, messageCtxHandler] = message.useMessage();
     const [loading, setLoading] = useState(false);
@@ -18,12 +18,12 @@ export default function Pods({ sessionKey, namespace, refreshCount }) {
     const [rawYaml, setRawYaml] = useState('');
     const [loadingYaml, setLoadingYaml] = useState(false);
     
-    // 当sessionKey、namespace或refreshCount改变时，重新加载pods数据
+    // 当sessionKey、namespace、refreshCount或searchText改变时，重新加载pods数据
     useEffect(() => {
         if (sessionKey && namespace) {
             loadPodData();
         }
-    }, [sessionKey, namespace, refreshCount]);
+    }, [sessionKey, namespace, refreshCount, searchText]);
     
     // 加载pods数据
     const loadPodData = async () => {
@@ -67,7 +67,7 @@ export default function Pods({ sessionKey, namespace, refreshCount }) {
     
     // 处理pods项，提取关键信息
     const processPodItems = (items) => {
-        return items.map(item => {
+        let processedItems = items.map(item => {
             return {
                 name: item.metadata.name,
                 namespace: item.metadata.namespace,
@@ -84,6 +84,15 @@ export default function Pods({ sessionKey, namespace, refreshCount }) {
                 _raw: item // 保存原始数据用于查看详情
             };
         });
+        
+        // 如果有搜索文本，进行过滤
+        if (searchText) {
+            processedItems = processedItems.filter(item => 
+                item.name.toLowerCase().includes(searchText.toLowerCase())
+            );
+        }
+        
+        return processedItems;
     };
     
     // 生成pods表格列配置

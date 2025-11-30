@@ -1,5 +1,5 @@
-use csv::Writer;
-use serde_json::Value;
+use csv::{Reader, Writer};
+use serde_json::{Value, Map};
 use std::fs::File;
 
 #[tauri::command]
@@ -63,3 +63,39 @@ pub fn generate_csv(json_data: Vec<Value>, file_path: String) -> Result<String, 
     
     Ok(format!("CSV file created successfully at: {}", file_path))
 }
+
+#[tauri::command]
+pub fn read_csv(file_path: String) -> Result<Vec<Value>, String> {
+    // Open the CSV file
+    let file = File::open(&file_path).map_err(|e| format!("Failed to open file: {}", e))?;
+    
+    let mut reader = Reader::from_reader(file);
+    
+    // Get headers from the CSV file
+    let headers = reader
+        .headers()
+        .map_err(|e| format!("Failed to read headers: {}", e))?;
+    
+    let headers: Vec<String> = headers.iter().map(|h| h.to_string()).collect();
+    
+    // Read all records
+    let mut records = Vec::new();
+    
+    for result in reader.records() {
+        let record = result.map_err(|e| format!("Failed to read record: {}", e))?;
+        
+        // Create a JSON object for this record
+        let mut json_obj = Map::new();
+        
+        // Map each field to the corresponding header
+        for (header, field) in headers.iter().zip(record.iter()) {
+            json_obj.insert(header.clone(), Value::String(field.to_string()));
+        }
+        
+        records.push(Value::Object(json_obj));
+    }
+    
+    Ok(records)
+}
+
+

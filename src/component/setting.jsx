@@ -1,25 +1,45 @@
-import React, { use, useEffect, useState } from 'react'
-import { Table, Button, Modal, Form, Space, Radio, Input, message } from 'antd';
-import { getServerList, createServer, deleteServer } from "../service/database";
+import React, { useEffect, useState } from 'react'
+import { Table, Button, Modal, Form, Space, Radio, Input, message, Card } from 'antd';
+import { getServerList, createServer, deleteServer, updateServer } from "../service/database";
+import { DesktopOutlined, InfoCircleOutlined, EditOutlined, DownloadOutlined, UploadOutlined } from '@ant-design/icons';
+import SystemManagement from './system';
+import { open as openDialog } from '@tauri-apps/plugin-dialog';
+import { generateCSV, readCSV } from "../service/invoke";
+
 
 
 export default function Setting({ onConnect }) {
     const [form] = Form.useForm();
     const [list, setList] = useState([]);
     const [open, setOpen] = useState(false)
+    const [editingRecord, setEditingRecord] = useState(null);
     const [modal, contextHolder] = Modal.useModal();
     const [messageApi, msgContextHolder] = message.useMessage();
     
+    // 系统信息Modal状态
+    const [systemInfoVisible, setSystemInfoVisible] = useState(false);
+    const [currentServer, setCurrentServer] = useState(null);
+    const [sessionKey, setSessionKey] = useState(null);
+
     let columns = [
-        {
-            title: '名称',
-            dataIndex: 'name',
-            key: 'name',
+        { title: '名称', 
+            dataIndex: 'name', 
+            key: 'name', 
+            render: (text, record) => 
+                (<Button type="link" size="small" onClick={() => onConnect?.(record)} style={{ padding: 0 }}
+                icon={<DesktopOutlined />}
+                >                    {text}                
+            </Button>), 
         },
         {
             title: 'IP',
             dataIndex: 'server',
-            key: 'server'
+            key: 'server',
+            render: (text, record) => (
+                <Button type="link" size="small" onClick={() => showSystemInfo(record)} style={{ padding: 0 }} icon={<InfoCircleOutlined />}>
+                    {text}
+                </Button>
+            ),
         },
         {
             title: '端口',
@@ -37,15 +57,13 @@ export default function Setting({ onConnect }) {
             key: 'password',
             render: (text) => <div>*****</div>,
         },
-        {
-            title: '操作',
+        {            title: '操作',
             fixed: 'right',
             key: 'action',
             render: (text, record) => {
                 return <Space>
-                    <Button type="link" size='small' onClick={() => onConnect?.(record)}>连接</Button>
                     <Button type="link" size='small' onClick={() => onConnect?.(record, 'k3s')}>k3s管理</Button>
-                    <Button type="link" size='small' onClick={() => onConnect?.(record, 'system')}>系统信息</Button>
+                    <Button type="link" size='small' onClick={() => toEdit(record)} icon={<EditOutlined />}>编辑</Button>
                     <Button type="link" size='small' onClick={() => toCopy(record)}>复制</Button>
                     <Button type="link" size='small' onClick={() => toDelete(record)}>删除</Button>
                 </Space>
@@ -59,8 +77,21 @@ export default function Setting({ onConnect }) {
     }, []);
 
     const handleAdd = () => {
+        setEditingRecord(null);
         setOpen(true)
         form.resetFields()
+    }
+    
+    const toEdit = (record) => {
+        setEditingRecord(record);
+        form.setFieldsValue({
+            name: record.name,
+            server: record.server,
+            port: record.port,
+            username: record.username,
+            password: record.password,
+        })
+        setOpen(true)
     }
 
     const handleConfirmCreare = () => {
@@ -68,15 +99,23 @@ export default function Setting({ onConnect }) {
             console.log('Success:', value);
             setOpen(false);
             try {
-                let res = await createServer(value.name, value.server, value.port, value.username, value.password);
-                console.log('res', res);
+                if (editingRecord) {
+                    // 更新现有记录
+                    await updateServer(editingRecord.id, value.name, value.server, value.port, value.username, value.password);
+                    messageApi.success('更新成功');
+                } else {
+                    // 创建新记录
+                    await createServer(value.name, value.server, value.port, value.username, value.password);
+                    messageApi.success('创建成功');
+                }
                 let newList = await getServerList();
                 setList(newList);
+                setEditingRecord(null);
             } catch (error) {
                 console.log('error', error);
                 messageApi.open({
                     type: 'error',
-                    content: '创建失败:' + error.message,
+                    content: (editingRecord ? '更新' : '创建') + '失败:' + error.message,
                 });
                 return false
             }
@@ -108,20 +147,137 @@ export default function Setting({ onConnect }) {
         })
         setOpen(true)
     }
+    
+    // 显示系统信息Modal
+    const showSystemInfo = async (record) => {
+        setCurrentServer(record);
+        try {
+            // 连接服务器获取sessionKey
+            const key = await onConnect(record, 'system', false);
+            if (key) {
+                setSessionKey(key);
+                setSystemInfoVisible(true);
+            } else {
+                messageApi.error('连接服务器失败');
+            }
+        } catch (error) {
+            messageApi.error('打开系统信息失败: ' + error.message);
+        }
+    }
+
+    // 导出配置到CSV文件
+    const handleExport = async () => {
+        try {
+            // 选择导出文件夹
+            const selected = await openDialog({
+                title: '选择导出文件夹',
+                directory: true,
+                multiple: false,
+            });
+
+            if (selected) {
+                const exportPath = selected;
+                const exportFileName = 'server_configs.csv';
+                const exportFilePath = `${exportPath}/${exportFileName}`;
+
+                // 准备导出数据（使用服务器列表数据）
+                const exportData = list;
+
+                // 调用generateCSV函数生成CSV文件
+                await generateCSV(exportData, exportFilePath);
+
+                messageApi.success(`配置已成功导出到：${exportFilePath}`);
+            }
+        } catch (error) {
+            console.error('导出配置失败:', error);
+            messageApi.error('导出配置失败: ' + error.message);
+        }
+    }
+
+    // 从CSV文件导入配置
+    const handleImport = async () => {
+        try {
+            // 选择CSV文件
+            const selected = await openDialog({
+                title: '选择CSV配置文件',
+                filters: [
+                    { name: 'CSV Files', extensions: ['csv'] },
+                    { name: 'All Files', extensions: ['*'] }
+                ],
+                multiple: false,
+            });
+
+            // 如果没有选择文件，直接返回
+            if (!selected) {
+                return;
+            }
+
+            const importFilePath = selected;
+
+            // 调用readCSV函数读取CSV文件内容
+            const csvData = await readCSV(importFilePath);
+
+            // 如果CSV数据为空或长度为0，直接返回
+            if (!csvData || csvData.length === 0) {
+                messageApi.warning('CSV文件为空或格式不正确');
+                return;
+            }
+
+            // 遍历CSV数据并创建服务器配置
+            let successCount = 0;
+            let errorCount = 0;
+
+            for (const item of csvData) {
+                try {
+                    // 检查必要字段
+                    if (item.name && item.server && item.port && item.username && item.password) {
+                        // 调用createServer创建服务器配置
+                        await createServer(
+                            item.name,
+                            item.server,
+                            item.port,
+                            item.username,
+                            item.password
+                        );
+                        successCount++;
+                    } else {
+                        console.error('数据不完整:', item);
+                        errorCount++;
+                    }
+                } catch (error) {
+                    console.error('创建服务器配置失败:', error);
+                    errorCount++;
+                }
+            }
+
+            // 刷新服务器列表
+            let newList = await getServerList();
+            setList(newList);
+
+            // 显示导入结果
+            messageApi.success(`导入完成：成功${successCount}条，失败${errorCount}条`);
+        } catch (error) {
+            console.error('导入配置失败:', error);
+            messageApi.error('导入配置失败: ' + error.message);
+        }
+    }
 
     return <>
-        <Space style={{marginBottom: 10}}>
+        <Space style={{ marginBottom: 10 }}>
             <Button type="default" size="small" onClick={handleAdd}>新增</Button>
+            <Button type="default" size="small" onClick={handleExport} icon={<DownloadOutlined />}>导出</Button>
+            <Button type="default" size="small" onClick={handleImport} icon={<UploadOutlined />}>导入</Button>
         </Space>
         <Table dataSource={list} columns={columns} pagination={false} bordered size='small' />
 
         <Modal
-            title={<>新增配置</>}
+            title={<>${editingRecord ? '编辑配置' : '新增配置'}</>}
             closable={true}
             open={open}
             onOk={handleConfirmCreare}
             onCancel={() => {
-                setOpen(false)
+                setOpen(false);
+                setEditingRecord(null);
             }}
         >
             <Form form={form} layout="horizontal" labelCol={{ span: 5 }} wrapperCol={{ span: 17 }} initialValues={{
@@ -146,5 +302,17 @@ export default function Setting({ onConnect }) {
         </Modal>
         {contextHolder}
         {msgContextHolder}
+        
+        {/* 系统信息Modal */}
+        <Modal
+            title={`系统信息 - ${currentServer?.server || ''}`}
+            open={systemInfoVisible}
+            onCancel={() => setSystemInfoVisible(false)}
+            footer={null}
+            width={800}
+            destroyOnClose
+        >
+            <SystemManagement sessionKey={sessionKey} />
+        </Modal>
     </>
 }

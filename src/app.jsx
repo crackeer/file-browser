@@ -91,6 +91,9 @@ export default function App() {
             });
             return
         }
+        if(type == "system") {
+            return connectKey
+        }
         console.log('Connected with session key:', connectKey);
 
         let sessionResult = await createSession(connectKey, server.id + '', getDefaultUserPath(server.username), type); // 添加type字段

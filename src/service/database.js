@@ -40,6 +40,14 @@ export const deleteServer = async (id) => {
     return await db.execute(
         "delete from server where id = $1",
         [id]
+    )
+}
+
+export const updateServer = async (id, name, server, port, username, password) => {
+    let db = await getSQLiteDB();
+    return await db.execute(
+        "UPDATE server SET name = $1, server = $2, port = $3, username = $4, password = $5 WHERE id = $6",
+        [name, server, port, username, password, id]
     );
 }
 
@@ -127,5 +135,13 @@ export const deleteCommand = async (id) => {
     return await db.execute(
         "delete from command where id = $1",
         [id]
+    );
+}
+
+export const updateCommand = async (id, name, category, command) => {
+    let db = await getSQLiteDB();
+    return await db.execute(
+        "UPDATE command SET name = $1, category = $2, command = $3 WHERE id = $4",
+        [name, category, command, id]
     );
 }

@@ -4,7 +4,7 @@ import { SyncOutlined } from '@ant-design/icons';
 import { sshExecuteCmd } from "../../service/invoke"
 const { Link } = Typography;
 
-export default function ConfigMaps({ sessionKey, namespace, refreshCount }) {
+export default function ConfigMaps({ sessionKey, namespace, refreshCount, searchText }) {
     const [modal, contextHolder] = Modal.useModal();
     const [messageApi, messageCtxHandler] = message.useMessage();
     const [loading, setLoading] = useState(false);
@@ -17,12 +17,12 @@ export default function ConfigMaps({ sessionKey, namespace, refreshCount }) {
     const [loadingYaml, setLoadingYaml] = useState(false);
     const [currentResourceName, setCurrentResourceName] = useState('');
     
-    // 当sessionKey、namespace或refreshCount改变时，重新加载configmaps数据
+    // 当sessionKey、namespace、refreshCount或searchText改变时，重新加载configmaps数据
     useEffect(() => {
         if (sessionKey && namespace) {
             loadConfigMapData();
         }
-    }, [sessionKey, namespace, refreshCount]);
+    }, [sessionKey, namespace, refreshCount, searchText]);
     
     // 加载configmaps数据
     const loadConfigMapData = async () => {
@@ -66,7 +66,7 @@ export default function ConfigMaps({ sessionKey, namespace, refreshCount }) {
     
     // 处理configmaps数据，提取关键信息
     const processConfigmapItems = (items) => {
-        return items.map(item => {
+        let processedItems = items.map(item => {
             // 计算数据大小
             const dataSize = item.data ? 
                 new Blob([JSON.stringify(item.data)]).size : 0;
@@ -95,6 +95,15 @@ export default function ConfigMaps({ sessionKey, namespace, refreshCount }) {
                 _raw: item // 保存原始数据用于查看详情
             };
         });
+        
+        // 如果有搜索文本，进行过滤
+        if (searchText) {
+            processedItems = processedItems.filter(item => 
+                item.name.toLowerCase().includes(searchText.toLowerCase())
+            );
+        }
+        
+        return processedItems;
     };
     
     // 格式化字节大小

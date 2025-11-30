@@ -4,7 +4,7 @@ import { sshExecuteCmd } from "../../service/invoke";
 
 const { Link } = Typography;
 
-export default function Services({ sessionKey, namespace, refreshCount }) {
+export default function Services({ sessionKey, namespace, refreshCount, searchText }) {
     const [modal, contextHolder] = Modal.useModal();
     const [messageApi, messageCtxHandler] = message.useMessage();
     const [loading, setLoading] = useState(false);
@@ -17,12 +17,12 @@ export default function Services({ sessionKey, namespace, refreshCount }) {
     const [rawYaml, setRawYaml] = useState('');
     const [loadingYaml, setLoadingYaml] = useState(false);
     
-    // 当sessionKey、namespace或refreshCount改变时，重新加载services数据
+    // 当sessionKey、namespace、refreshCount或searchText改变时，重新加载services数据
     useEffect(() => {
         if (sessionKey && namespace) {
             loadServiceData();
         }
-    }, [sessionKey, namespace, refreshCount]);
+    }, [sessionKey, namespace, refreshCount, searchText]);
     
     // 加载services数据
     const loadServiceData = async () => {
@@ -66,7 +66,7 @@ export default function Services({ sessionKey, namespace, refreshCount }) {
     
     // 处理services项，提取关键信息
     const processServiceItems = (items) => {
-        return items.map(item => {
+        let processedItems = items.map(item => {
             return {
                 name: item.metadata.name,
                 namespace: item.metadata.namespace,
@@ -80,6 +80,15 @@ export default function Services({ sessionKey, namespace, refreshCount }) {
                 _raw: item // 保存原始数据用于查看详情
             };
         });
+        
+        // 如果有搜索文本，进行过滤
+        if (searchText) {
+            processedItems = processedItems.filter(item => 
+                item.name.toLowerCase().includes(searchText.toLowerCase())
+            );
+        }
+        
+        return processedItems;
     };
     
     // 生成services表格列配置

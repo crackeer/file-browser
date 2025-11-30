@@ -1,12 +1,16 @@
 import React, { useEffect, useState } from 'react'
 import { Table, Button, Modal, Form, Space, Input, message, AutoComplete, Tabs, Card } from 'antd';
-import { getCommandList, createCommand, deleteCommand } from "../service/database";
+import { getCommandList, createCommand, deleteCommand, updateCommand } from "../service/database";
+import { DownloadOutlined, UploadOutlined } from '@ant-design/icons';
+import { open as openDialog } from '@tauri-apps/plugin-dialog';
+import { generateCSV, readCSV } from "../service/invoke";
 
 
 export default function Command() {
     const [form] = Form.useForm();
     const [list, setList] = useState([]);
     const [open, setOpen] = useState(false)
+    const [editingRecord, setEditingRecord] = useState(null);
     const [modal, contextHolder] = Modal.useModal();
     const [messageApi, msgContextHolder] = message.useMessage();
     const [categories, setCategories] = useState([]);
@@ -35,6 +39,7 @@ export default function Command() {
             render: (text, record) => {
                 return <Space>
                     <Button type="link" size='small' onClick={() => toShow(record)}>详情</Button>
+                    <Button type="link" size='small' onClick={() => toEdit(record)}>编辑</Button>
                     <Button type="link" size='small' onClick={() => toCopy(record)}>复制</Button>
                     <Button type="link" size='small' onClick={() => toDelete(record)}>删除</Button>
                 </Space>
@@ -56,8 +61,19 @@ export default function Command() {
     }
 
     const handleAdd = () => {
+        setEditingRecord(null);
         setOpen(true)
         form.resetFields()
+    }
+
+    const toEdit = (record) => {
+        setEditingRecord(record);
+        form.setFieldsValue({
+            name: record.name,
+            category: record.category,
+            command: record.command,
+        })
+        setOpen(true)
     }
 
     const handleConfirmCreate = () => {
@@ -65,17 +81,28 @@ export default function Command() {
             console.log('Success:', value);
             setOpen(false);
             try {
-                await createCommand(value.name, value.category, value.command);
+                if (editingRecord) {
+                    // 更新现有记录
+                    await updateCommand(editingRecord.id, value.name, value.category, value.command);
+                    messageApi.open({
+                        type: 'success',
+                        content: 'Command updated successfully',
+                    });
+                } else {
+                    // 创建新记录
+                    await createCommand(value.name, value.category, value.command);
+                    messageApi.open({
+                        type: 'success',
+                        content: 'Command created successfully',
+                    });
+                }
                 await loadCommandList();
-                messageApi.open({
-                    type: 'success',
-                    content: 'Command created successfully',
-                });
+                setEditingRecord(null);
             } catch (error) {
                 console.log('error', error);
                 messageApi.open({
                     type: 'error',
-                    content: 'Failed to create: ' + error.message,
+                    content: (editingRecord ? 'Failed to update: ' : 'Failed to create: ') + error.message,
                 });
                 return false
             }
@@ -131,9 +158,105 @@ export default function Command() {
         setOpen(true)
     }
 
+    // 导出命令到CSV文件
+    const handleExport = async () => {
+        try {
+            // 选择导出文件夹
+            const selected = await openDialog({
+                title: '选择导出文件夹',
+                directory: true,
+                multiple: false,
+            });
+
+            if (selected) {
+                const exportPath = selected;
+                const exportFileName = 'commands.csv';
+                const exportFilePath = `${exportPath}/${exportFileName}`;
+
+                // 准备导出数据（使用命令列表数据）
+                const exportData = list;
+
+                // 调用generateCSV函数生成CSV文件
+                await generateCSV(exportData, exportFilePath);
+
+                messageApi.success(`命令已成功导出到：${exportFilePath}`);
+            }
+        } catch (error) {
+            console.error('导出命令失败:', error);
+            messageApi.error('导出命令失败: ' + error.message);
+        }
+    }
+
+    // 从CSV文件导入命令
+    const handleImport = async () => {
+        try {
+            // 选择CSV文件
+            const selected = await openDialog({
+                title: '选择CSV命令文件',
+                filters: [
+                    { name: 'CSV Files', extensions: ['csv'] },
+                    { name: 'All Files', extensions: ['*'] }
+                ],
+                multiple: false,
+            });
+
+            // 如果没有选择文件，直接返回
+            if (!selected) {
+                return;
+            }
+
+            const importFilePath = selected;
+
+            // 调用readCSV函数读取CSV文件内容
+            const csvData = await readCSV(importFilePath);
+
+            // 如果CSV数据为空或长度为0，直接返回
+            if (!csvData || csvData.length === 0) {
+                messageApi.warning('CSV文件为空或格式不正确');
+                return;
+            }
+
+            // 遍历CSV数据并创建命令
+            let successCount = 0;
+            let errorCount = 0;
+
+            for (const item of csvData) {
+                try {
+                    // 检查必要字段
+                    if (item.name && item.command) {
+                        // 调用createCommand创建命令
+                        await createCommand(
+                            item.name,
+                            item.category || '未分类',
+                            item.command
+                        );
+                        successCount++;
+                    } else {
+                        console.error('数据不完整:', item);
+                        errorCount++;
+                    }
+                } catch (error) {
+                    console.error('创建命令失败:', error);
+                    errorCount++;
+                }
+            }
+
+            // 刷新命令列表
+            await loadCommandList();
+
+            // 显示导入结果
+            messageApi.success(`导入完成：成功${successCount}条，失败${errorCount}条`);
+        } catch (error) {
+            console.error('导入命令失败:', error);
+            messageApi.error('导入命令失败: ' + error.message);
+        }
+    }
+
     return <>
         <Space style={{ marginBottom: 10 }}>
             <Button type="default" size="small" onClick={handleAdd}>新建命令</Button>
+            <Button type="default" size="small" onClick={handleExport} icon={<DownloadOutlined />}>导出</Button>
+            <Button type="default" size="small" onClick={handleImport} icon={<UploadOutlined />}>导入</Button>
         </Space>
 
         <Tabs
@@ -155,12 +278,13 @@ export default function Command() {
         />
 
         <Modal
-            title={<>命令创建</>}
+            title={<>${editingRecord ? '编辑命令' : '命令创建'}</>}
             closable={true}
             open={open}
             onOk={handleConfirmCreate}
             onCancel={() => {
-                setOpen(false)
+                setOpen(false);
+                setEditingRecord(null);
             }}
         >
             <Form form={form} layout="horizontal" labelCol={{ span: 5 }} wrapperCol={{ span: 17 }}>

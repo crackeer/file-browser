@@ -2,7 +2,7 @@
 extern crate lazy_static;
 
 mod command;
-use command::csv::generate_csv;
+use command::csv::{generate_csv, read_csv};
 
 use command::ssh::{
     disconnect_server, download_remote_file_sync, exist_ssh_session, get_transfer_remote_progress,
@@ -35,6 +35,7 @@ pub fn run() {
             download_remote_file_sync,
             disconnect_server,
             generate_csv,
+            read_csv,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

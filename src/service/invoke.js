@@ -138,6 +138,12 @@ export const generateCSV = async (jsonData, filePath) => {
     });
 };
 
+export const readCSV = async (filePath) => {
+    return await invoke("read_csv", {
+        filePath,
+    });
+};
+
 export const isSessionConnected = async (sessionKey) => {
     let result = await invoke("exist_ssh_session", {
         sessionKey,
