@@ -75,25 +75,45 @@ export default function App() {
         }
     }
 
-    const handleConnect = async function (server, type = 'ssh') {
+    const handleConnect = async function (server, type = 'ssh', isTest = false) {
         console.log('Connecting to server:', server, randomSessionKey());
-        messageApi.open({
-            type: 'loading',
-            content: 'Connecting...',
-            duration: 0,
-        });
-        let connectKey = await sshConnectByPassword(randomSessionKey(), server.server, server.port, server.username, server.password)
-        messageApi.destroy();
-        if (connectKey.error != undefined && connectKey.error.length > 0) {
+        
+        // 测试连接时不显示全局loading消息，避免干扰用户体验
+        if (!isTest) {
             messageApi.open({
-                type: 'error',
-                content: '连接失败：' + connectKey.error,
+                type: 'loading',
+                content: 'Connecting...',
+                duration: 0,
             });
-            return
         }
+        
+        let sessionKey = isTest ? 'test_' + randomSessionKey() : randomSessionKey();
+        let connectKey = await sshConnectByPassword(sessionKey, server.server, server.port, server.username, server.password)
+        
+        if (!isTest) {
+            messageApi.destroy();
+        }
+        
+        if (connectKey.error != undefined && connectKey.error.length > 0) {
+            if (!isTest) {
+                messageApi.open({
+                    type: 'error',
+                    content: '连接失败：' + connectKey.error,
+                });
+            }
+            return null
+        }
+        
+        // 测试连接模式：直接返回连接结果，不创建会话或标签页
+        if (isTest) {
+            console.log('Test connection successful with session key:', connectKey);
+            return connectKey;
+        }
+        
         if(type == "system") {
             return connectKey
         }
+        
         console.log('Connected with session key:', connectKey);
 
         let sessionResult = await createSession(connectKey, server.id + '', getDefaultUserPath(server.username), type); // 添加type字段

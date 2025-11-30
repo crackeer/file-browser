@@ -94,6 +94,43 @@ export default function Setting({ onConnect }) {
         setOpen(true)
     }
 
+    // 测试连接功能
+    const handleTestConnection = () => {
+        form.validateFields().then(async (value) => {
+            try {
+                messageApi.loading({
+                    key : 'testConnection',
+                    content: '正在测试连接...',
+                    duration: 0,
+                });
+                // 调用onConnect函数测试连接，但不打开连接窗口
+                const result = await onConnect(value, null, true);
+                if (result) {
+                    messageApi.success({
+                        key : 'testConnection',
+                        content: '连接测试成功！',
+                        duration: 2,
+                    });
+                } else {
+                    messageApi.error({
+                        key : 'testConnection',
+                        content: '连接测试失败',
+                        duration: 2,
+                    });
+                }
+            } catch (error) {
+                console.error('测试连接失败:', error);
+                messageApi.error({
+                    key : 'testConnection',
+                    content: '连接测试失败: ' + error.message,
+                    duration: 2,
+                });
+            }
+        }).catch(info => {
+            console.log('Validate Failed:', info);
+        });
+    }
+
     const handleConfirmCreare = () => {
         form.validateFields().then(async (value) => {
             console.log('Success:', value);
@@ -279,6 +316,20 @@ export default function Setting({ onConnect }) {
                 setOpen(false);
                 setEditingRecord(null);
             }}
+            footer={[
+                <Button key="test" onClick={handleTestConnection}>
+                    测试连接
+                </Button>,
+                <Button key="cancel" onClick={() => {
+                    setOpen(false);
+                    setEditingRecord(null);
+                }}>
+                    取消
+                </Button>,
+                <Button key="submit" type="primary" onClick={handleConfirmCreare}>
+                    {editingRecord ? '更新' : '确认'}
+                </Button>,
+            ]}
         >
             <Form form={form} layout="horizontal" labelCol={{ span: 5 }} wrapperCol={{ span: 17 }} initialValues={{
                 port: '22', username: 'root', directory: '/tmp/'
