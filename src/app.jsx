@@ -210,7 +210,7 @@ export default function App() {
     });
 
     return (
-        <div style={{ padding: 20 }}>
+        <div style={{ padding: '0 10px' }}>
             <Tabs
                 items={tabItems}
                 activeKey={tabKey}

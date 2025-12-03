@@ -259,23 +259,7 @@ export default function Command() {
             <Button type="default" size="small" onClick={handleImport} icon={<UploadOutlined />}>导入</Button>
         </Space>
 
-        <Tabs
-            activeKey={activeTab}
-            onChange={setActiveTab}
-            tabPosition="left"
-            items={[
-                {
-                    key: 'all',
-                    label: 'All',
-                    children: <Table dataSource={list} columns={columns} pagination={false} bordered size='small' />
-                },
-                ...categories.map(category => ({
-                    key: category,
-                    label: category,
-                    children: <Table dataSource={list.filter(item => item.category === category)} columns={columns} pagination={false} bordered size='small' />
-                }))
-            ]}
-        />
+       <Table dataSource={list} columns={columns} pagination={false} bordered size='small' />
 
         <Modal
             title={<>${editingRecord ? '编辑命令' : '命令创建'}</>}

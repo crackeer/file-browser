@@ -190,6 +190,7 @@ export default function SSHConnection({ sessionKey }) {
     }
     const refreshFiles = () => {
         listFiles(currentPath)
+        loadCommandList();
     }
 
     const toDeleteFile = (file) => {
@@ -630,10 +631,6 @@ export default function SSHConnection({ sessionKey }) {
             });
         }
     }
-    const toCreateOperation = () => {
-        form.resetFields();
-        setOpen(true);
-    }
 
     const toRunCommand = (command) => {
         setCommand(command)
@@ -642,6 +639,20 @@ export default function SSHConnection({ sessionKey }) {
 
     const doRunCommand = () => {
         console.log('do run command', command)
+        if (command.command == undefined || command.command.toLocaleLowerCase().startsWith('goto')) {
+           let parts = command.command.split(' ')
+           if (parts.length >= 2) {
+                let dir = parts[1]
+                goQuickDir({
+                    path: dir
+                })
+                messageApi.open({
+                    type: 'success',
+                    content: '切换目录成功',
+                });
+                setShowRunCommandModal(false)
+           }
+        }
         sshExecuteCmd(sessionKey, command.command).then(result => {
             if (result.error != undefined && result.error.length > 0) {
                 setCommand(prevState => ({ ...prevState, error: result.error }))
@@ -684,7 +695,7 @@ export default function SSHConnection({ sessionKey }) {
                 </Space>
                 <Divider size="small"></Divider>
                 <Space>
-                    {commandList.map(command => <Button key={command.id} onClick={toRunCommand.bind(this, command)}>{command.category}：{command.name}</Button>)}
+                    {commandList.map(command => <Button key={command.id} onClick={toRunCommand.bind(this, command)} type='link'>{command.category}：{command.name}</Button>)}
                 </Space>
             </div>
         </Card>
@@ -722,6 +733,7 @@ export default function SSHConnection({ sessionKey }) {
             open={showModal}
             footer={null}
             width={'70%'}
+            mask={false}
             onCancel={toCancelUpload}
         >
             <HandleProgress {...handleStatus} action={action} />

@@ -298,7 +298,7 @@ export default function Setting({ onConnect }) {
 
     return <>
         <Space style={{ marginBottom: 10 }}>
-            <Button type="default" size="small" onClick={handleAdd}>新增</Button>
+            <Button type="default" size="small" onClick={handleAdd}>新增服务器</Button>
             <Button type="default" size="small" onClick={handleExport} icon={<DownloadOutlined />}>导出</Button>
             <Button type="default" size="small" onClick={handleImport} icon={<UploadOutlined />}>导入</Button>
         </Space>
