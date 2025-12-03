@@ -6,8 +6,6 @@ import SystemManagement from './system';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { generateCSV, readCSV } from "../service/invoke";
 
-
-
 export default function Setting({ onConnect }) {
     const [form] = Form.useForm();
     const [list, setList] = useState([]);
@@ -15,31 +13,27 @@ export default function Setting({ onConnect }) {
     const [editingRecord, setEditingRecord] = useState(null);
     const [modal, contextHolder] = Modal.useModal();
     const [messageApi, msgContextHolder] = message.useMessage();
-    
+
     // 系统信息Modal状态
     const [systemInfoVisible, setSystemInfoVisible] = useState(false);
     const [currentServer, setCurrentServer] = useState(null);
     const [sessionKey, setSessionKey] = useState(null);
 
     let columns = [
-        { title: '名称', 
-            dataIndex: 'name', 
-            key: 'name', 
-            render: (text, record) => 
-                (<Button type="link" size="small" onClick={() => onConnect?.(record)} style={{ padding: 0 }}
+        {
+            title: '名称',
+            dataIndex: 'name',
+            key: 'name',
+            render: (text, record) =>
+            (<Button type="link" size="small" onClick={() => onConnect?.(record)} style={{ padding: 0 }}
                 icon={<DesktopOutlined />}
-                >                    {text}                
-            </Button>), 
+            >                    {text}
+            </Button>),
         },
         {
             title: 'IP',
             dataIndex: 'server',
-            key: 'server',
-            render: (text, record) => (
-                <Button type="link" size="small" onClick={() => showSystemInfo(record)} style={{ padding: 0 }} icon={<InfoCircleOutlined />}>
-                    {text}
-                </Button>
-            ),
+            key: 'server'
         },
         {
             title: '端口',
@@ -57,12 +51,15 @@ export default function Setting({ onConnect }) {
             key: 'password',
             render: (text) => <div>*****</div>,
         },
-        {            title: '操作',
+        {
+            title: '操作',
             fixed: 'right',
             key: 'action',
             render: (text, record) => {
                 return <Space>
-                    <Button type="link" size='small' onClick={() => onConnect?.(record, 'k3s')}>k3s管理</Button>
+                    <Button type="link" size="small" onClick={() => showSystemInfo(record)} icon={<InfoCircleOutlined />}>
+                        服务器信息
+                    </Button>
                     <Button type="link" size='small' onClick={() => toEdit(record)} icon={<EditOutlined />}>编辑</Button>
                     <Button type="link" size='small' onClick={() => toCopy(record)}>复制</Button>
                     <Button type="link" size='small' onClick={() => toDelete(record)}>删除</Button>
@@ -81,7 +78,7 @@ export default function Setting({ onConnect }) {
         setOpen(true)
         form.resetFields()
     }
-    
+
     const toEdit = (record) => {
         setEditingRecord(record);
         form.setFieldsValue({
@@ -99,7 +96,7 @@ export default function Setting({ onConnect }) {
         form.validateFields().then(async (value) => {
             try {
                 messageApi.loading({
-                    key : 'testConnection',
+                    key: 'testConnection',
                     content: '正在测试连接...',
                     duration: 0,
                 });
@@ -107,13 +104,13 @@ export default function Setting({ onConnect }) {
                 const result = await onConnect(value, null, true);
                 if (result) {
                     messageApi.success({
-                        key : 'testConnection',
+                        key: 'testConnection',
                         content: '连接测试成功！',
                         duration: 2,
                     });
                 } else {
                     messageApi.error({
-                        key : 'testConnection',
+                        key: 'testConnection',
                         content: '连接测试失败',
                         duration: 2,
                     });
@@ -121,7 +118,7 @@ export default function Setting({ onConnect }) {
             } catch (error) {
                 console.error('测试连接失败:', error);
                 messageApi.error({
-                    key : 'testConnection',
+                    key: 'testConnection',
                     content: '连接测试失败: ' + error.message,
                     duration: 2,
                 });
@@ -184,7 +181,7 @@ export default function Setting({ onConnect }) {
         })
         setOpen(true)
     }
-    
+
     // 显示系统信息Modal
     const showSystemInfo = async (record) => {
         setCurrentServer(record);
@@ -353,7 +350,7 @@ export default function Setting({ onConnect }) {
         </Modal>
         {contextHolder}
         {msgContextHolder}
-        
+
         {/* 系统信息Modal */}
         <Modal
             title={`系统信息 - ${currentServer?.server || ''}`}

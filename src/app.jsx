@@ -4,7 +4,6 @@ import { CloseOutlined } from '@ant-design/icons';
 import Setting from './component/setting';
 import Command from './component/command';
 import SSHConnection from './component/ssh';
-import K3sManagement from './component/k3s';
 import SystemManagement from './component/system';
 import { sshConnectByPassword, sshDisconnect, isSessionConnected } from './service/invoke';
 import { createSession, deleteSession, getSessionList, getServerByID, getServerBySessionKey, getSessionByKey } from './service/database';
@@ -27,14 +26,14 @@ export default function App() {
     const [tabs, setTabs] = useState([
         {
             key: 'setting',
-            type : 'setting',
+            type: 'setting',
             sessionKey: 'setting',
             label: '服务器列表',
             closable: false,
         },
         {
             key: 'command',
-            type : 'command',
+            type: 'command',
             sessionKey: 'command',
             label: '命令行列表',
             closable: false,
@@ -55,29 +54,23 @@ export default function App() {
             }
             newTabs.push({
                 key: result[i].session_key, // 使用唯一的tab key
-                type : result[i].type,
-                session_key : result[i].session_key,
-                label: getTabName(result[i].type, server.name, result[i].id),
+                type: result[i].type,
+                session_key: result[i].session_key,
+                label: getTabName(server),
                 closable: true,
             })
         }
         setTabs([...tabs, ...newTabs])
     }
 
-    
-    const getTabName = (type, name, id) => {
-        if (type === 'k3s') {
-            return '(K3s)' + name
-        } else if (type === 'system') {
-            return  '(System)' + name
-        } else {
-            return '(File)' + name + '-'
-        }
+
+    const getTabName = (data) => {
+        return data.name + '-' + data.server
     }
 
     const handleConnect = async function (server, type = 'ssh', isTest = false) {
         console.log('Connecting to server:', server, randomSessionKey());
-        
+
         // 测试连接时不显示全局loading消息，避免干扰用户体验
         if (!isTest) {
             messageApi.open({
@@ -86,14 +79,14 @@ export default function App() {
                 duration: 0,
             });
         }
-        
+
         let sessionKey = isTest ? 'test_' + randomSessionKey() : randomSessionKey();
         let connectKey = await sshConnectByPassword(sessionKey, server.server, server.port, server.username, server.password)
-        
+
         if (!isTest) {
             messageApi.destroy();
         }
-        
+
         if (connectKey.error != undefined && connectKey.error.length > 0) {
             if (!isTest) {
                 messageApi.open({
@@ -103,31 +96,31 @@ export default function App() {
             }
             return null
         }
-        
+
         // 测试连接模式：直接返回连接结果，不创建会话或标签页
         if (isTest) {
             console.log('Test connection successful with session key:', connectKey);
             return connectKey;
         }
-        
-        if(type == "system") {
+
+        if (type == "system") {
             return connectKey
         }
-        
+
         console.log('Connected with session key:', connectKey);
 
         let sessionResult = await createSession(connectKey, server.id + '', getDefaultUserPath(server.username), type); // 添加type字段
         const newTab = {
             key: connectKey,
-            type : type,
-            session_key : connectKey,
-            label: getTabName(type, server.name, sessionResult.id),
+            type: type,
+            session_key: connectKey,
+            label: getTabName(server),
             closable: true,
         };
         setTabs([...tabs, newTab]);
         setTabKey(connectKey);
     }
-   
+
 
     const handleTabChange = async (tabKey) => {
         if (tabKey == 'setting' || tabKey == 'command') {
@@ -135,11 +128,11 @@ export default function App() {
             return;
         }
 
-         // 找到对应的tab对象
+        // 找到对应的tab对象
         const tab = tabs.find(t => t.key === tabKey);
         if (!tab) return;
-        
-        
+
+
         const sessionKey = tab.session_key;
         let result = await isSessionConnected(sessionKey);
         console.log('Session connected:', result);
@@ -167,9 +160,9 @@ export default function App() {
         // 找到对应的tab对象
         const tabToRemove = tabs.find(tab => tab.key === targetKey);
         if (!tabToRemove) return;
-        
+
         const sessionKeyToRemove = tabToRemove.session_key;
-        
+
         let disconnectResult = await sshDisconnect(sessionKeyToRemove);
         console.log('Disconnected with result:', disconnectResult);
         let deleteResult = await deleteSession(sessionKeyToRemove);
@@ -184,7 +177,7 @@ export default function App() {
         }
     }
 
-    const tabItems = tabs.map((tab,index) => {
+    const tabItems = tabs.map((tab, index) => {
         let tabData = {
             key: tab.key,
             label: (
@@ -208,12 +201,6 @@ export default function App() {
                 break;
             case 'command':
                 tabData.children = <Command />
-                break;
-            case 'k3s':
-                tabData.children = <K3sManagement sessionKey={tab.session_key} />
-                break;
-            case 'system':
-                tabData.children = <SystemManagement sessionKey={tab.session_key} />
                 break;
             default:
                 tabData.children = <SSHConnection sessionKey={tab.session_key} />

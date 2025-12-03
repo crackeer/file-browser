@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { open } from "@tauri-apps/plugin-dialog";
-import { Button, Space, Tabs, Modal, Table, Typography, Card, message, Progress, Dropdown, Form, AutoComplete, Spin, Alert, Popconfirm, Input, Empty, Tag } from 'antd';
+import { Button, Space, Tabs, Modal, Table, Typography, Card, message, Progress, Dropdown, Form, AutoComplete, Spin, Alert, Popconfirm, Input, Empty, Tag, Divider } from 'antd';
 import { SyncOutlined, UploadOutlined, FolderAddOutlined, CopyOutlined, DownloadOutlined, ExportOutlined } from '@ant-design/icons';
 import { sshListFiles, deleteRemoteFile, uploadRemoteFileSync, getTransferProgress, cancelFileTransfer, createRemoteDir, downloadRemoteFileSync, renameRemoteFile, catRemoteFile, k3sLoadRemoteFile, generateCSV, sshExecuteCmd } from "../service/invoke"
 import lodash from 'lodash'
@@ -651,15 +651,21 @@ export default function SSHConnection({ sessionKey }) {
         })
     }
 
+    const goTmp = () => {
+        goQuickDir({
+            path: '/tmp'
+        })
+    }
+
     return <div>
         {messageCtxHandler}
         {contextHolder}
-        <Card size='small' type="inner" style={{ marginBottom: 15 }} title="快捷命令">
+        <Card size='small' style={{ marginBottom: 10 }} >
             <div style={{ marginBottom: 15 }}>
                 <Space>
-                    <Button onClick={refreshFiles} size="small" icon={<SyncOutlined />}>刷新</Button>
-                    <Button onClick={copyDir} size="small" icon={<CopyOutlined />}>复制路径</Button>
-                    <Button size="small" icon={<UploadOutlined />} onClick={toUploadFile}>上传</Button>
+                    <Button onClick={refreshFiles} icon={<SyncOutlined />}>刷新</Button>
+                    <Button onClick={copyDir} icon={<CopyOutlined />}>复制路径</Button>
+                    <Button icon={<UploadOutlined />} onClick={toUploadFile}>上传文件</Button>
                     <Popconfirm
                         title="新建文件夹"
                         description={
@@ -671,32 +677,16 @@ export default function SSHConnection({ sessionKey }) {
                         placement='bottom'
                         onOpenChange={() => console.log('open change')}
                     >
-                        <Button size="small" icon={<FolderAddOutlined />}>新建文件夹</Button>
+                        <Button icon={<FolderAddOutlined />}>新建文件夹</Button>
                     </Popconfirm>
-                    <Button size="small" icon={<ExportOutlined />} onClick={exportCSV}>导出文件列表</Button>
+                    <Button icon={<ExportOutlined />} onClick={goTmp}>/tmp目录</Button>
+                    <Button icon={<ExportOutlined />} onClick={exportCSV}>导出文件列表</Button>
+                </Space>
+                <Divider size="small"></Divider>
+                <Space>
+                    {commandList.map(command => <Button key={command.id} onClick={toRunCommand.bind(this, command)}>{command.category}：{command.name}</Button>)}
                 </Space>
             </div>
-            <Tabs
-                activeKey={activeTab}
-                onChange={setActiveTab}
-                tabPosition="left"
-                items={[
-                    {
-                        key: 'all',
-                        label: '全部',
-                        children: <Space>
-                            {commandList.map(command => <Button size="small" key={command.id} onClick={toRunCommand.bind(this, command)}>{command.name}</Button>)}
-                        </Space>
-                    },
-                    ...categories.map(category => ({
-                        key: category,
-                        label: category,
-                        children: <Space>
-                            {commandList.filter(item => item.category === category).map(command => <Button key={command.id} size="small" onClick={toRunCommand.bind(this, command)}>{command.name}</Button>)}
-                        </Space>
-                    }))
-                ]}
-            />
         </Card>
         <Table dataSource={filterList}
             columns={columns}
@@ -708,15 +698,10 @@ export default function SSHConnection({ sessionKey }) {
             pagination={false}
             rowKey={'name'}
             loading={loading}
-            summary={() => {
-                return <Table.Summary.Row>
-                    <Table.Summary.Cell index={0} colSpan={4}><strong>文件数量:</strong> {filterList.length}</Table.Summary.Cell>
-                </Table.Summary.Row>
-            }}
             title={() => (
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
-                        路径：<Space split={"/"} align={'center'}>
+                        (数量: {filterList.length})路径：<Space split={"/"} align={'center'}>
                             <Link onClick={goQuickDir.bind(this, { path: '/' })} key={'/'}>根</Link>
                             {
                                 quickDirs.map(item => {
