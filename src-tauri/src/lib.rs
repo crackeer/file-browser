@@ -13,11 +13,13 @@ use command::ssh::{
 };
 
 use command::upload::{create_upload_task, delete_upload_task, get_upload_task_list};
+use logic::upload::crontab;
 
 use tauri_plugin_sql::{Migration, MigrationKind};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    crontab();
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())

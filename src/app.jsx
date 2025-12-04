@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Card, message, Tabs } from 'antd';
-import { CloseOutlined } from '@ant-design/icons';
+import { Button, message, Tabs, Modal, Card, Space } from 'antd';
+import { CloseOutlined, ArrowDownOutlined, ArrowUpOutlined } from '@ant-design/icons';
 import Setting from './component/setting';
 import Command from './component/command';
 import SSHConnection from './component/ssh';
-import SystemManagement from './component/system';
-import { sshConnectByPassword, sshDisconnect, isSessionConnected } from './service/invoke';
+import { sshConnectByPassword, sshDisconnect, isSessionConnected, getUploadTaskList } from './service/invoke';
 import { createSession, deleteSession, getSessionList, getServerByID, getServerBySessionKey, getSessionByKey } from './service/database';
 
 
@@ -19,10 +18,12 @@ function getDefaultUserPath(username) {
     }
     return "/home/" + username
 }
-
+var timer = null
 export default function App() {
     const [messageApi, contextHolder] = message.useMessage();
     const [tabKey, setTabKey] = useState('setting');
+    const [visible, setVisible] = useState(false);
+    const [uploadTaskList, setUploadTaskList] = useState([]);
     const [tabs, setTabs] = useState([
         {
             key: 'setting',
@@ -209,15 +210,86 @@ export default function App() {
         return tabData;
     });
 
+    
+    const showUploadTaskList = async () => {
+        setVisible(true);
+        toUploadTaskList();
+    }
+    const toUploadTaskList = async () => {
+        if (!visible) return;
+        setTimeout(async () => {
+            let result = await getUploadTaskList();
+            if (result.error != undefined) {
+                console.log(result)
+                return;
+            }
+            console.log('Upload task list:', result);
+            setUploadTaskList(result.reverse());
+            toUploadTaskList();
+        }, 1000)
+    }
+
     return (
         <div style={{ padding: '0 10px' }}>
             <Tabs
                 items={tabItems}
                 activeKey={tabKey}
                 onChange={handleTabChange}
+                tabBarExtraContent={
+                    <Space>
+                        <Button onClick={showUploadTaskList} type='link'>上传任务</Button>
+                        <Button onClick={showUploadTaskList} type='link'>下载任务</Button>
+                    </Space>
+                }
             >
             </Tabs>
             {contextHolder}
+            <Modal
+                title="上传任务列表"
+                open={visible}
+                onCancel={() => {setVisible(false)}}
+                footer={null}
+                width={'60%'}
+                style={{ width: '80%' }}
+            >
+                <Download data={uploadTaskList} />
+            </Modal>
         </div>
     );
+}
+
+function Download(props) {
+    if (props.data.length == 0) {
+        return (
+            <div>
+                <p>暂无上传任务</p>
+            </div>
+        )
+    }
+    return (
+        <div>
+            {
+                props.data.map((item) => (
+                    <Card title={<>
+                        {item.local_file}
+                        <br />
+                        {item.remote_dir}
+                    </>}>
+                        <p>
+                            上传文件：[{item.current_file_index}/{item.total_files}]{item.current_file}
+                        </p>
+                        <p>
+                            进度：{item.upload_size}
+                        </p>
+                        <p>
+                            状态：{item.status}
+                        </p>
+                        <p>
+                            消息：{item.message}
+                        </p>
+                    </Card>
+                ))
+            }
+        </div>
+    )
 }

@@ -153,3 +153,22 @@ export const isSessionConnected = async (sessionKey) => {
     }
     return result;
 };
+
+export const getUploadTaskList = async () => {
+    let result = await invoke("get_upload_task_list", {});
+    return result;
+};
+
+export const createUploadTask = async (task) => {
+    let result = await invoke("create_upload_task", {
+        task,
+    });
+    return result;
+};
+
+export const deleteUploadTask = async (index) => {
+    let result = await invoke("delete_upload_task", {
+        index,
+    });
+    return result;
+};

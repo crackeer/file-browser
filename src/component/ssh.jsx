@@ -2,12 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { open } from "@tauri-apps/plugin-dialog";
 import { Button, Space, Tabs, Modal, Table, Typography, Card, message, Progress, Dropdown, Form, AutoComplete, Spin, Alert, Popconfirm, Input, Empty, Tag, Divider } from 'antd';
 import { SyncOutlined, UploadOutlined, FolderAddOutlined, CopyOutlined, DownloadOutlined, ExportOutlined } from '@ant-design/icons';
-import { sshListFiles, deleteRemoteFile, uploadRemoteFileSync, getTransferProgress, cancelFileTransfer, createRemoteDir, downloadRemoteFileSync, renameRemoteFile, catRemoteFile, k3sLoadRemoteFile, generateCSV, sshExecuteCmd } from "../service/invoke"
+import { sshListFiles, deleteRemoteFile, uploadRemoteFileSync, getTransferProgress, cancelFileTransfer, createRemoteDir, downloadRemoteFileSync, renameRemoteFile, catRemoteFile, k3sLoadRemoteFile, generateCSV, sshExecuteCmd, createUploadTask } from "../service/invoke"
 import lodash from 'lodash'
 import { basename, join } from '@tauri-apps/api/path'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { partial } from "filesize";
-import { getSessionByKey, updateSessionPath, getCommandList } from "../service/database";
+import { getSessionByKey, updateSessionPath, getCommandList, getServerBySessionKey } from "../service/database";
 const { Link } = Typography;
 const { Search } = Input;
 
@@ -668,6 +668,59 @@ export default function SSHConnection({ sessionKey }) {
         })
     }
 
+    const toUploadFile2 = async (directory) => {
+        let selectFile = await open({
+            directory: directory,
+            multipart: false,
+            filters: [
+                {
+                    name: "",
+                    extensions: [],
+                },
+            ],
+        });
+        if (selectFile == null) {
+            return
+        }
+        try {
+            let server = await getServerBySessionKey(sessionKey);
+            if (server == null) {
+                messageApi.open({
+                    type: 'error',
+                    content: '获取服务器信息失败',
+                });
+                return
+            }
+            let task = {
+                user: server.username,
+                host: server.server,
+                port: server.port,
+                password: server.password,
+                local_file: selectFile,
+                remote_dir: currentPath,
+            }
+            let result = await createUploadTask(task)
+            if (result.error != undefined && result.error.length > 0) {
+                messageApi.open({
+                    type: 'error',
+                    content: '创建上传任务失败：' + result.error,
+                });
+                return
+            }
+            messageApi.open({
+                type: 'success',
+                content: '创建上传任务成功',
+            });
+        } catch (error) {
+            messageApi.open({
+                type: 'error',
+                content: '获取服务器信息失败：' + error,
+            });
+            return
+        }
+
+    }
+
     return <div>
         {messageCtxHandler}
         {contextHolder}
@@ -675,8 +728,8 @@ export default function SSHConnection({ sessionKey }) {
             <div style={{ marginBottom: 15 }}>
                 <Space>
                     <Button onClick={refreshFiles} icon={<SyncOutlined />}>刷新</Button>
-                    <Button onClick={copyDir} icon={<CopyOutlined />}>复制路径</Button>
-                    <Button icon={<UploadOutlined />} onClick={toUploadFile}>上传文件</Button>
+                    <Button icon={<UploadOutlined />} onClick={toUploadFile2.bind(this, false)}>上传文件</Button>
+                     <Button icon={<UploadOutlined />} onClick={toUploadFile2.bind(this, true)}>上传文件夹</Button>
                     <Popconfirm
                         title="新建文件夹"
                         description={
@@ -719,7 +772,9 @@ export default function SSHConnection({ sessionKey }) {
                                     return <Link onClick={goQuickDir.bind(this, item)} key={item.path}>{item.name}</Link>
                                 })
                             }
+
                         </Space>
+                         <Button onClick={copyDir} icon={<CopyOutlined />} size='small' type='text' style={{ marginLeft: 5 }}></Button>
                     </div>
                     <Input placeholder="搜索..." allowClear onChange={handleSearch} style={{ width: '150px' }} value={keyword} />
                 </div>
