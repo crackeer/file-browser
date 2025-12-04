@@ -12,6 +12,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::net::SocketAddr;
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TransferInfo {
     local_file: String,

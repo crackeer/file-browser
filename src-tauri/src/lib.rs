@@ -2,6 +2,8 @@
 extern crate lazy_static;
 
 mod command;
+mod logic;
+mod util;
 use command::csv::{generate_csv, read_csv};
 
 use command::ssh::{
@@ -9,6 +11,8 @@ use command::ssh::{
     remote_exec_command, remote_list_files, send_cancel_signal, ssh_connect_by_password,
     upload_remote_file, upload_remote_file_sync,
 };
+
+use command::upload::{create_upload_task, delete_upload_task, get_upload_task_list};
 
 use tauri_plugin_sql::{Migration, MigrationKind};
 
@@ -36,6 +40,9 @@ pub fn run() {
             disconnect_server,
             generate_csv,
             read_csv,
+            create_upload_task,
+            get_upload_task_list,
+            delete_upload_task,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
