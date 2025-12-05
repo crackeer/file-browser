@@ -735,7 +735,7 @@ export default function SSHConnection({ sessionKey }) {
         {contextHolder}
         <Card size='small' style={{ marginBottom: 10 }} >
             <div style={{ marginBottom: 15 }}>
-                <Space>
+                <Space style={{ marginBottom: 10 }}>
                     <Button onClick={refreshFiles} icon={<SyncOutlined />}>刷新</Button>
                     <Button icon={<UploadOutlined />} onClick={toUploadFile2.bind(this, false)}>上传文件</Button>
                      <Button icon={<UploadOutlined />} onClick={toUploadFile2.bind(this, true)}>上传文件夹</Button>
@@ -755,7 +755,6 @@ export default function SSHConnection({ sessionKey }) {
                     <Button icon={<ExportOutlined />} onClick={goTmp}>/tmp目录</Button>
                     <Button icon={<ExportOutlined />} onClick={exportCSV}>导出文件列表</Button>
                 </Space>
-                <Divider size="small"></Divider>
                 <Space>
                     {commandList.map(command => <Button key={command.id} onClick={toRunCommand.bind(this, command)} type='link'>{command.category}：{command.name}</Button>)}
                 </Space>
