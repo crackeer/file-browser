@@ -669,16 +669,20 @@ export default function SSHConnection({ sessionKey }) {
     }
 
     const toUploadFile2 = async (directory) => {
-        let selectFile = await open({
-            directory: directory,
+        let option = {
             multipart: false,
             filters: [
                 {
                     name: "",
-                    extensions: [],
+                    extensions: [""],
                 },
-            ],
-        });
+            ]
+        }
+        if (directory == true) {
+            option.directory = true
+        }
+        let selectFile = await open(option);
+
         if (selectFile == null) {
             return
         }
@@ -700,17 +704,22 @@ export default function SSHConnection({ sessionKey }) {
                 remote_dir: currentPath,
             }
             let result = await createUploadTask(task)
+            console.log('create upload task result', result)
+            if (result == null) {
+                messageApi.open({
+                    type: 'success',
+                    content: '创建上传任务成功',
+                });
+                return
+            }
             if (result.error != undefined && result.error.length > 0) {
+                console.log('create upload task error', result)
                 messageApi.open({
                     type: 'error',
                     content: '创建上传任务失败：' + result.error,
                 });
                 return
             }
-            messageApi.open({
-                type: 'success',
-                content: '创建上传任务成功',
-            });
         } catch (error) {
             messageApi.open({
                 type: 'error',

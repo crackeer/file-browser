@@ -18,7 +18,8 @@ use logic::upload::crontab;
 use tauri_plugin_sql::{Migration, MigrationKind};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
+#[tokio::main]
+pub async fn run() {
     crontab();
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())

@@ -99,7 +99,7 @@ pub fn get_cancel_signal(index: usize) -> i32 {
 
 pub fn crontab() {
     tokio::spawn(async {
-        let mut interval = time::interval(Duration::from_secs(1));
+        let mut interval = time::interval(Duration::from_secs(3));
         loop {
             interval.tick().await;
             _ = handle_upload_task();
@@ -160,12 +160,12 @@ pub fn remove_upload_task(index: usize) -> Result<(), String> {
 }
 
 pub fn handle_task(task: TaskInfo, index: usize) -> Result<String, String> {
-    update_task_info(index, TaskInfo {
+    _ = update_task_info(index, TaskInfo {
         status: String::from("calculating"),
         ..TaskInfo::default()
     });
     let files = list_transfer_files(&task.local_file, &task.remote_dir)?;
-    update_task_info(index, TaskInfo {
+    _ = update_task_info(index, TaskInfo {
         total_files: files.len() as u64,
         ..TaskInfo::default()
     });
@@ -177,12 +177,13 @@ pub fn handle_task(task: TaskInfo, index: usize) -> Result<String, String> {
         &task.password,
     )?;
 
-    for file in files.iter() {
-        update_task_info(index, TaskInfo {
-            current_file_index: task.current_file_index,
+    for (file_index, file) in files.iter().enumerate() {
+        println!("{:?}", file.local_file.clone());
+        _ = update_task_info(index, TaskInfo {
+            current_file_index: file_index as u64 + 1,
             total_files: task.total_files,
-            current_file: task.current_file.clone(),
-            total_size: task.total_size,
+            current_file: file.local_file.clone(),
+            total_size: file.total_size,
             upload_size: 0,
             status: String::from("uploading"),
             ..TaskInfo::default()
@@ -204,6 +205,10 @@ pub fn handle_task(task: TaskInfo, index: usize) -> Result<String, String> {
             break;
         }
     }
+    update_task_info(index, TaskInfo {
+        status: String::from("success"),
+        ..TaskInfo::default()
+    })?;
     Ok(String::from("success"))
 }
 

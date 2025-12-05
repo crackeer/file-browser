@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Button, message, Tabs, Modal, Card, Space } from 'antd';
 import { CloseOutlined, ArrowDownOutlined, ArrowUpOutlined } from '@ant-design/icons';
 import Setting from './component/setting';
@@ -18,12 +18,12 @@ function getDefaultUserPath(username) {
     }
     return "/home/" + username
 }
-var timer = null
 export default function App() {
     const [messageApi, contextHolder] = message.useMessage();
     const [tabKey, setTabKey] = useState('setting');
     const [visible, setVisible] = useState(false);
     const [uploadTaskList, setUploadTaskList] = useState([]);
+    const intervalTimerRef = useRef(null);
     const [tabs, setTabs] = useState([
         {
             key: 'setting',
@@ -210,23 +210,32 @@ export default function App() {
         return tabData;
     });
 
-    
-    const showUploadTaskList = async () => {
-        setVisible(true);
-        toUploadTaskList();
-    }
-    const toUploadTaskList = async () => {
-        if (!visible) return;
-        setTimeout(async () => {
-            let result = await getUploadTaskList();
-            if (result.error != undefined) {
-                console.log(result)
-                return;
-            }
-            console.log('Upload task list:', result);
-            setUploadTaskList(result.reverse());
+
+    useEffect(() => {
+        console.log('visible:', visible, intervalTimerRef.current)
+        if (!visible) {
+            clearInterval(intervalTimerRef.current);
+            return;
+        }
+        intervalTimerRef.current = setInterval(() => {
             toUploadTaskList();
         }, 1000)
+    }, [visible])
+
+    const showUploadTaskList = async () => {
+        setVisible(true);
+    }
+    const toUploadTaskList = async () => {
+        let result = await getUploadTaskList();
+        if (result.error != undefined) {
+            console.log(result)
+            return;
+        }
+        for (let item of result) {
+            item['percent'] = item.upload_size / item.total_size * 100;
+        }
+        console.log('Upload task list:', result);
+        setUploadTaskList(result.reverse());
     }
 
     return (
@@ -279,7 +288,7 @@ function Download(props) {
                             上传文件：[{item.current_file_index}/{item.total_files}]{item.current_file}
                         </p>
                         <p>
-                            进度：{item.upload_size}
+                            进度：{item.percent}
                         </p>
                         <p>
                             状态：{item.status}
